@@ -17,16 +17,14 @@ export interface TerrainParams {
   groundLevel: number;
 }
 
-/**
- * x, y, z: Coordinate in the 3D grid
- * type: The BlockType enum value
- */
-export type AddBlockCallback = (x: number, y: number, z: number, type: BlockType) => void;
+export interface BlockData {
+  x: number;
+  y: number;
+  z: number;
+  type: BlockType;
+}
 
-/**
- * The signature for any terrain generation algorithm
- */
-export type GenFunction = (params: TerrainParams, addBlock: AddBlockCallback) => void;
+export type GenFunction = (params: TerrainParams) => BlockData[];
 
 export const BLOCK_COLORS: Record<number, number> = {
   [BlockType.GRASS]: 0x559944,

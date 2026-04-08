@@ -92,3 +92,47 @@ const params = reactive<TerrainParams>({
     </main>
   </div>
 </template>
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.app-container {
+  display: flex; /* This puts sidebar and main side-by-side */
+  width: 100vw;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 280px;
+  background: #1e1e1e;
+  color: white;
+  padding: 20px;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  z-index: 10;
+}
+
+.viewport-grid {
+  flex-grow: 1; /* This makes the grid take up remaining space */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  background: #333;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+input[type="range"] {
+  width: 100%;
+}
+</style>

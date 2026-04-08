@@ -6,7 +6,6 @@ import {
   BlockType,
   type TerrainParams,
   type GenFunction,
-  type AddBlockCallback,
   BLOCK_COLORS,
 } from "../types/terrain";
 
@@ -17,7 +16,6 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-
 const container = ref<HTMLDivElement | null>(null);
 const isLocked = ref(false);
 
@@ -29,14 +27,14 @@ let instancedMeshes: THREE.InstancedMesh[] = [];
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
-const clock = new THREE.Clock();
+const clock = new THREE.Timer(); // Using Timer as you requested
 
-let moveForward = false;
-let moveBackward = false;
-let moveLeft = false;
-let moveRight = false;
-let moveUp = false;
-let moveDown = false;
+let moveForward = false,
+  moveBackward = false,
+  moveLeft = false,
+  moveRight = false,
+  moveUp = false,
+  moveDown = false;
 
 const init = () => {
   if (!container.value) return;
@@ -49,7 +47,7 @@ const init = () => {
   camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
   camera.position.set(
     props.params.worldSize / 2,
-    75,
+    props.params.worldSize + 10,
     props.params.worldSize / 2,
   );
 
@@ -67,7 +65,6 @@ const init = () => {
   controls = new PointerLockControls(camera, renderer.domElement);
   controls.addEventListener("lock", () => (isLocked.value = true));
   controls.addEventListener("unlock", () => (isLocked.value = false));
-
   container.value.addEventListener("click", () => controls.lock());
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -153,34 +150,31 @@ const generate = () => {
     [BlockType.WATER]: [],
   };
 
-  // The Callback passed to the player's generation function
-  const addBlock: AddBlockCallback = (x, y, z, type) => {
-    if (type !== BlockType.NULL && instancedData[type]) {
-      const matrix = new THREE.Matrix4().makeTranslation(x, y, z);
-      instancedData[type].push(matrix);
+  const blockList = props.genFunction(props.params);
+
+  // Process the returned list
+  blockList.forEach((block) => {
+    if (block.type !== BlockType.NULL && instancedData[block.type]) {
+      const matrix = new THREE.Matrix4().makeTranslation(
+        block.x,
+        block.y,
+        block.z,
+      );
+      instancedData[block.type].push(matrix);
     }
-  };
+  });
 
-  props.genFunction(props.params, addBlock);
-
-  // Create Instanced Meshes
   Object.entries(instancedData).forEach(([typeStr, matrices]) => {
     const type = parseInt(typeStr);
     if (matrices.length === 0) return;
-
     const material = new THREE.MeshPhongMaterial({ color: BLOCK_COLORS[type] });
     const imesh = new THREE.InstancedMesh(geometry, material, matrices.length);
-
-    for (let i = 0; i < matrices.length; i++) {
-      imesh.setMatrixAt(i, matrices[i]);
-    }
-
+    for (let i = 0; i < matrices.length; i++) imesh.setMatrixAt(i, matrices[i]);
     scene.add(imesh);
     instancedMeshes.push(imesh);
   });
 };
 
-// Re-generate if params change
 watch(
   () => props.params,
   () => generate(),
@@ -189,11 +183,12 @@ watch(
 
 const animate = () => {
   requestAnimationFrame(animate);
+  clock.update();
+  const delta = clock.getDelta();
 
   if (controls.isLocked) {
-    const delta = clock.getDelta();
-    const speed = 12.0;
-    const friction = 12.0;
+    const speed = 15.0;
+    const friction = 10.0;
 
     velocity.x -= velocity.x * friction * delta;
     velocity.z -= velocity.z * friction * delta;
@@ -211,8 +206,6 @@ const animate = () => {
     controls.moveRight(-velocity.x * 10 * delta);
     controls.moveForward(-velocity.z * 10 * delta);
     camera.position.y += velocity.y * 10 * delta;
-  } else {
-    clock.getDelta(); // Keep clock synced
   }
 
   renderer.render(scene, camera);
@@ -230,10 +223,12 @@ onMounted(init);
 </template>
 
 <style scoped>
+/* Ensure the container actually has height to show the canvas */
 .world-container {
   position: relative;
   border: 1px solid #333;
   height: 100%;
+  width: 100%;
   overflow: hidden;
   background: #000;
 }
