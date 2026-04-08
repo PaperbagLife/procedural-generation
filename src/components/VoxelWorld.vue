@@ -1,59 +1,55 @@
-<template>
-  <div class="world-container">
-    <div ref="container" class="canvas-container"></div>
-    <div class="label">{{ title }}</div>
-    <!-- Crosshair only shows when this specific window is active -->
-    <div v-if="isLocked" class="crosshair"></div>
-  </div>
-</template>
-
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref, watch, onUnmounted } from "vue";
 import * as THREE from "three";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls";
+import {
+  BlockType,
+  type TerrainParams,
+  type GenFunction,
+  type AddBlockCallback,
+  BLOCK_COLORS,
+} from "../types/terrain";
 
-const props = defineProps(["params", "genFunction", "title"]);
-const container = ref(null);
+interface Props {
+  params: TerrainParams;
+  genFunction: GenFunction;
+  title: string;
+}
+
+const props = defineProps<Props>();
+
+const container = ref<HTMLDivElement | null>(null);
 const isLocked = ref(false);
 
-let scene,
-  camera,
-  renderer,
-  controls,
-  instancedMeshes = [];
+let scene: THREE.Scene;
+let camera: THREE.PerspectiveCamera;
+let renderer: THREE.WebGLRenderer;
+let controls: PointerLockControls;
+let instancedMeshes: THREE.InstancedMesh[] = [];
+
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const clock = new THREE.Clock();
 
-// Movement States
-let moveForward = false,
-  moveBackward = false,
-  moveLeft = false,
-  moveRight = false,
-  moveUp = false,
-  moveDown = false;
-
-const BLOCKS = { NULL: 0, GRASS: 1, SNOW: 2, ROCK: 3, WATER: 4 };
-const COLORS = {
-  [BLOCKS.GRASS]: 0x559944,
-  [BLOCKS.SNOW]: 0xffffff,
-  [BLOCKS.ROCK]: 0x888888,
-  [BLOCKS.WATER]: 0x3366ff,
-};
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let moveUp = false;
+let moveDown = false;
 
 const init = () => {
+  if (!container.value) return;
+
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 20, props.params.worldSize * 2);
 
-  camera = new THREE.PerspectiveCamera(
-    75,
-    container.value.clientWidth / container.value.clientHeight,
-    0.1,
-    1000,
-  );
+  const aspect = container.value.clientWidth / container.value.clientHeight;
+  camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
   camera.position.set(
     props.params.worldSize / 2,
-    70,
+    75,
     props.params.worldSize / 2,
   );
 
@@ -69,17 +65,12 @@ const init = () => {
   scene.add(sun);
 
   controls = new PointerLockControls(camera, renderer.domElement);
-
-  // Important: Pointer Lock Events
   controls.addEventListener("lock", () => (isLocked.value = true));
   controls.addEventListener("unlock", () => (isLocked.value = false));
 
-  container.value.addEventListener("click", () => {
-    controls.lock();
-  });
+  container.value.addEventListener("click", () => controls.lock());
 
-  // KEY LISTENERS
-  const onKeyDown = (e) => {
+  const onKeyDown = (e: KeyboardEvent) => {
     if (!controls.isLocked) return;
     switch (e.code) {
       case "KeyW":
@@ -105,7 +96,7 @@ const init = () => {
     }
   };
 
-  const onKeyUp = (e) => {
+  const onKeyUp = (e: KeyboardEvent) => {
     switch (e.code) {
       case "KeyW":
         moveForward = false;
@@ -135,11 +126,11 @@ const init = () => {
   generate();
   animate();
 
-  // Cleanup listeners on destroy
   onUnmounted(() => {
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("resize", onWindowResize);
+    renderer.dispose();
   });
 };
 
@@ -155,25 +146,41 @@ const generate = () => {
   instancedMeshes = [];
 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
-  const instancedData = { [1]: [], [2]: [], [3]: [], [4]: [] };
+  const instancedData: Record<number, THREE.Matrix4[]> = {
+    [BlockType.GRASS]: [],
+    [BlockType.SNOW]: [],
+    [BlockType.ROCK]: [],
+    [BlockType.WATER]: [],
+  };
 
-  props.genFunction(props.params, (x, y, z, type) => {
-    if (type !== BLOCKS.NULL) {
-      instancedData[type].push(new THREE.Matrix4().makeTranslation(x, y, z));
+  // The Callback passed to the player's generation function
+  const addBlock: AddBlockCallback = (x, y, z, type) => {
+    if (type !== BlockType.NULL && instancedData[type]) {
+      const matrix = new THREE.Matrix4().makeTranslation(x, y, z);
+      instancedData[type].push(matrix);
     }
-  });
+  };
 
-  Object.keys(instancedData).forEach((type) => {
-    const matrices = instancedData[type];
+  props.genFunction(props.params, addBlock);
+
+  // Create Instanced Meshes
+  Object.entries(instancedData).forEach(([typeStr, matrices]) => {
+    const type = parseInt(typeStr);
     if (matrices.length === 0) return;
-    const material = new THREE.MeshPhongMaterial({ color: COLORS[type] });
+
+    const material = new THREE.MeshPhongMaterial({ color: BLOCK_COLORS[type] });
     const imesh = new THREE.InstancedMesh(geometry, material, matrices.length);
-    for (let i = 0; i < matrices.length; i++) imesh.setMatrixAt(i, matrices[i]);
+
+    for (let i = 0; i < matrices.length; i++) {
+      imesh.setMatrixAt(i, matrices[i]);
+    }
+
     scene.add(imesh);
     instancedMeshes.push(imesh);
   });
 };
 
+// Re-generate if params change
 watch(
   () => props.params,
   () => generate(),
@@ -185,32 +192,27 @@ const animate = () => {
 
   if (controls.isLocked) {
     const delta = clock.getDelta();
-    const speed = 15.0;
-    const friction = 10.0;
+    const speed = 12.0;
+    const friction = 12.0;
 
-    // Friction
     velocity.x -= velocity.x * friction * delta;
     velocity.z -= velocity.z * friction * delta;
     velocity.y -= velocity.y * friction * delta;
 
-    // Direction
     direction.z = Number(moveForward) - Number(moveBackward);
     direction.x = Number(moveRight) - Number(moveLeft);
     direction.y = Number(moveUp) - Number(moveDown);
     direction.normalize();
 
-    // Acceleration
     if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
     if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
     if (moveUp || moveDown) velocity.y += direction.y * speed * delta;
 
-    // Apply Movement
     controls.moveRight(-velocity.x * 10 * delta);
     controls.moveForward(-velocity.z * 10 * delta);
     camera.position.y += velocity.y * 10 * delta;
   } else {
-    // Stop clock accumulating delta when not active
-    clock.getDelta();
+    clock.getDelta(); // Keep clock synced
   }
 
   renderer.render(scene, camera);
@@ -219,12 +221,21 @@ const animate = () => {
 onMounted(init);
 </script>
 
+<template>
+  <div class="world-container">
+    <div ref="container" class="canvas-container"></div>
+    <div class="label">{{ title }}</div>
+    <div v-if="isLocked" class="crosshair"></div>
+  </div>
+</template>
+
 <style scoped>
 .world-container {
   position: relative;
-  border: 1px solid #444;
+  border: 1px solid #333;
   height: 100%;
   overflow: hidden;
+  background: #000;
 }
 .canvas-container {
   width: 100%;
@@ -235,22 +246,21 @@ onMounted(init);
   position: absolute;
   top: 10px;
   left: 10px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #eee;
+  padding: 5px 12px;
   pointer-events: none;
-  border-radius: 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 11px;
+  border: 1px solid #555;
 }
 .crosshair {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 10px;
-  height: 10px;
-  border: 2px solid white;
+  width: 8px;
+  height: 8px;
+  border: 1px solid white;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
