@@ -63,7 +63,7 @@ const params = reactive<TerrainParams>({
           type="range"
           v-model.number="params.worldSize"
           min="20"
-          max="80"
+          max="120"
           step="5"
         />
       </div>
@@ -101,7 +101,7 @@ body {
 }
 
 .app-container {
-  display: flex; /* This puts sidebar and main side-by-side */
+  display: flex;
   width: 100vw;
   height: 100vh;
 }
@@ -119,7 +119,7 @@ body {
 }
 
 .viewport-grid {
-  flex-grow: 1; /* This makes the grid take up remaining space */
+  flex-grow: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;

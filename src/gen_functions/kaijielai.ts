@@ -1,7 +1,6 @@
 import {
   BlockType,
   type TerrainParams,
-  type GenFunction,
   type BlockData,
 } from "../types/terrain";
 

@@ -6,7 +6,7 @@ export const BlockType = {
   WATER: 4,
 } as const;
 
-export type BlockType = typeof BlockType[keyof typeof BlockType];
+export type BlockType = (typeof BlockType)[keyof typeof BlockType];
 
 export interface TerrainParams {
   freq: number;
@@ -30,5 +30,5 @@ export const BLOCK_COLORS: Record<number, number> = {
   [BlockType.GRASS]: 0x559944,
   [BlockType.SNOW]: 0xffffff,
   [BlockType.ROCK]: 0x888888,
-  [BlockType.WATER]: 0x3366ff
+  [BlockType.WATER]: 0x3366ff,
 };
