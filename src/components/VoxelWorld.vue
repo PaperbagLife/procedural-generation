@@ -36,6 +36,16 @@ let moveForward = false,
   moveUp = false,
   moveDown = false;
 
+const disposeInstancedMesh = (mesh: THREE.InstancedMesh) => {
+  mesh.geometry.dispose();
+
+  if (Array.isArray(mesh.material)) {
+    mesh.material.forEach((material) => material.dispose());
+  } else {
+    mesh.material.dispose();
+  }
+};
+
 const init = () => {
   if (!container.value) return;
 
@@ -139,7 +149,10 @@ const onWindowResize = () => {
 };
 
 const generate = () => {
-  instancedMeshes.forEach((m) => scene.remove(m));
+  instancedMeshes.forEach((m) => {
+    scene.remove(m);
+    disposeInstancedMesh(m);
+  });
   instancedMeshes = [];
 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
@@ -148,6 +161,9 @@ const generate = () => {
     [BlockType.SNOW]: [],
     [BlockType.ROCK]: [],
     [BlockType.WATER]: [],
+    [BlockType.DIRT]: [],
+    [BlockType.WOOD]: [],
+    [BlockType.LEAVES]: [],
   };
 
   const blockList = props.genFunction(props.params);

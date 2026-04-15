@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { reactive } from "vue";
 import VoxelWorld from "./components/VoxelWorld.vue";
-import {
-  BlockType,
-  type TerrainParams,
-  type GenFunction,
-} from "./types/terrain";
+import { type TerrainParams } from "./types/terrain";
 
 import { generateTopLeft } from "./gen_functions/yunkunlu";
 import { generateTopRight } from "./gen_functions/kaijielai";
@@ -20,7 +16,12 @@ const params = reactive<TerrainParams>({
   worldSize: 100,
   worldHeight: 100,
   groundLevel: 60,
+  seed: Date.now(),
 });
+
+const regenerateSeed = () => {
+  params.seed = Date.now();
+};
 </script>
 
 <template>
@@ -66,6 +67,12 @@ const params = reactive<TerrainParams>({
           max="120"
           step="5"
         />
+      </div>
+      <div class="control-group">
+        <label>Seed ({{ params.seed }})</label>
+        <button class="regen-button" type="button" @click="regenerateSeed">
+          Generate
+        </button>
       </div>
     </aside>
     <main class="viewport-grid">
@@ -132,6 +139,24 @@ body {
   flex-direction: column;
   gap: 5px;
 }
+
+.regen-button {
+  border: 1px solid #5a5a5a;
+  background: #2b2b2b;
+  color: #f4f4f4;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.regen-button:hover {
+  background: #3a3a3a;
+}
+
+.regen-button:active {
+  transform: translateY(1px);
+}
+
 input[type="range"] {
   width: 100%;
 }
