@@ -28,14 +28,20 @@ export interface BlockData {
   type: BlockType;
 }
 
+export interface BlockMaterial {
+  color: number;
+  transparent?: boolean;
+  opacity?: number;
+}
+
 export type GenFunction = (params: TerrainParams) => BlockData[];
 
-export const BLOCK_COLORS: Record<number, number> = {
-  [BlockType.GRASS]: 0x559944,
-  [BlockType.SNOW]: 0xffffff,
-  [BlockType.ROCK]: 0x888888,
-  [BlockType.WATER]: 0x3366ff,
-  [BlockType.DIRT]: 0x6b4f2a,
-  [BlockType.WOOD]: 0x5c3a21,
-  [BlockType.LEAVES]: 0x2e6f2f,
+export const BLOCK_COLORS: Record<number, BlockMaterial> = {
+  [BlockType.GRASS]: { color: 0x559944 },
+  [BlockType.SNOW]: { color: 0xffffff },
+  [BlockType.ROCK]: { color: 0x888888 },
+  [BlockType.WATER]: { color: 0x3366ff, transparent: true, opacity: 0.5 },
+  [BlockType.DIRT]: { color: 0x6b4f2a },
+  [BlockType.WOOD]: { color: 0x5c3a21 },
+  [BlockType.LEAVES]: { color: 0x2e6f2f },
 };

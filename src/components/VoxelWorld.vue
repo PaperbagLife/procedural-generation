@@ -19,6 +19,8 @@ const props = defineProps<Props>();
 const container = ref<HTMLDivElement | null>(null);
 const isLocked = ref(false);
 
+let animationId: number | null = null;
+
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
@@ -73,7 +75,14 @@ const init = () => {
   scene.add(sun);
 
   controls = new PointerLockControls(camera, renderer.domElement);
-  controls.addEventListener("lock", () => (isLocked.value = true));
+  controls.addEventListener("lock", () => {
+    isLocked.value = true;
+    // Start the loop if it's not already running
+    clock.update();
+    if (animationId === null) {
+      animationId = requestAnimationFrame(animate);
+    }
+  });
   controls.addEventListener("unlock", () => (isLocked.value = false));
   container.value.addEventListener("click", () => controls.lock());
 
@@ -131,7 +140,7 @@ const init = () => {
   window.addEventListener("resize", onWindowResize);
 
   generate();
-  animate();
+  renderFrame();
 
   onUnmounted(() => {
     window.removeEventListener("keydown", onKeyDown);
@@ -146,7 +155,10 @@ const onWindowResize = () => {
   camera.aspect = container.value.clientWidth / container.value.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.value.clientWidth, container.value.clientHeight);
+  renderFrame();
 };
+
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 const generate = () => {
   instancedMeshes.forEach((m) => {
@@ -155,7 +167,6 @@ const generate = () => {
   });
   instancedMeshes = [];
 
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
   const instancedData: Record<number, THREE.Matrix4[]> = {
     [BlockType.GRASS]: [],
     [BlockType.SNOW]: [],
@@ -183,48 +194,62 @@ const generate = () => {
   Object.entries(instancedData).forEach(([typeStr, matrices]) => {
     const type = parseInt(typeStr);
     if (matrices.length === 0) return;
-    const material = new THREE.MeshPhongMaterial({ color: BLOCK_COLORS[type] });
-    const imesh = new THREE.InstancedMesh(geometry, material, matrices.length);
+    const material = new THREE.MeshPhongMaterial({
+      color: BLOCK_COLORS[type].color,
+      transparent: BLOCK_COLORS[type].transparent,
+      opacity: BLOCK_COLORS[type].opacity,
+    });
+    const imesh = new THREE.InstancedMesh(boxGeo, material, matrices.length);
     for (let i = 0; i < matrices.length; i++) imesh.setMatrixAt(i, matrices[i]);
     scene.add(imesh);
     instancedMeshes.push(imesh);
   });
 };
 
+const renderFrame = () => {
+  renderer.render(scene, camera);
+};
+
 watch(
   () => props.params,
-  () => generate(),
+  () => {
+    generate(); // Re-calculate voxels
+    renderFrame(); // Draw exactly one frame so the changes are visible
+  },
   { deep: true },
 );
 
 const animate = () => {
-  requestAnimationFrame(animate);
+  // If the user unlocks the mouse, stop requesting new frames
+  if (!isLocked.value) {
+    animationId = null;
+    return;
+  }
   clock.update();
   const delta = clock.getDelta();
 
-  if (controls.isLocked) {
-    const speed = 15.0;
-    const friction = 10.0;
+  const speed = 15.0;
+  const friction = 10.0;
 
-    velocity.x -= velocity.x * friction * delta;
-    velocity.z -= velocity.z * friction * delta;
-    velocity.y -= velocity.y * friction * delta;
+  velocity.x -= velocity.x * friction * delta;
+  velocity.z -= velocity.z * friction * delta;
+  velocity.y -= velocity.y * friction * delta;
 
-    direction.z = Number(moveForward) - Number(moveBackward);
-    direction.x = Number(moveRight) - Number(moveLeft);
-    direction.y = Number(moveUp) - Number(moveDown);
-    direction.normalize();
+  direction.z = Number(moveForward) - Number(moveBackward);
+  direction.x = Number(moveRight) - Number(moveLeft);
+  direction.y = Number(moveUp) - Number(moveDown);
+  direction.normalize();
 
-    if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-    if (moveUp || moveDown) velocity.y += direction.y * speed * delta;
+  if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+  if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+  if (moveUp || moveDown) velocity.y += direction.y * speed * delta;
 
-    controls.moveRight(-velocity.x * 10 * delta);
-    controls.moveForward(-velocity.z * 10 * delta);
-    camera.position.y += velocity.y * 10 * delta;
-  }
+  controls.moveRight(-velocity.x * 10 * delta);
+  controls.moveForward(-velocity.z * 10 * delta);
+  camera.position.y += velocity.y * 10 * delta;
 
-  renderer.render(scene, camera);
+  renderFrame();
+  animationId = requestAnimationFrame(animate);
 };
 
 onMounted(init);
