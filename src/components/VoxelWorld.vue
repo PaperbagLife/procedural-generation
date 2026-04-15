@@ -29,7 +29,7 @@ let instancedMeshes: THREE.InstancedMesh[] = [];
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
-const clock = new THREE.Timer(); // Using Timer as you requested
+const clock = new THREE.Timer();
 
 let moveForward = false,
   moveBackward = false,
@@ -62,6 +62,8 @@ const init = () => {
     props.params.worldSize + 10,
     props.params.worldSize / 2,
   );
+
+  camera.lookAt(props.params.worldSize / 2, 0, props.params.worldSize / 2);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.value.clientWidth, container.value.clientHeight);

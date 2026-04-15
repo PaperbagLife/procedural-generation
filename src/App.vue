@@ -43,8 +43,8 @@ const regenerateSeed = () => {
         <input
           type="range"
           v-model.number="params.amp"
-          min="5"
-          max="60"
+          min="1"
+          max="50"
           step="1"
         />
       </div>
