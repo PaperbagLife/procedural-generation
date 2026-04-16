@@ -177,6 +177,7 @@ const generate = () => {
     [BlockType.DIRT]: [],
     [BlockType.WOOD]: [],
     [BlockType.LEAVES]: [],
+    [BlockType.SAND]: [],
   };
 
   const blockList = props.genFunction(props.params);
@@ -275,11 +276,13 @@ onMounted(init);
   overflow: hidden;
   background: #000;
 }
+
 .canvas-container {
   width: 100%;
   height: 100%;
   cursor: crosshair;
 }
+
 .label {
   position: absolute;
   top: 10px;
@@ -292,6 +295,7 @@ onMounted(init);
   font-size: 11px;
   border: 1px solid #555;
 }
+
 .crosshair {
   position: absolute;
   top: 50%;

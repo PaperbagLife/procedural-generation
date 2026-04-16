@@ -15,7 +15,7 @@ const params = reactive<TerrainParams>({
   octaves: 3,
   worldSize: 100,
   worldHeight: 100,
-  groundLevel: 60,
+  groundLevel: 70,
   seed: Date.now(),
 });
 
@@ -30,43 +30,19 @@ const regenerateSeed = () => {
       <h2>Generator</h2>
       <div class="control-group">
         <label>Frequency ({{ params.freq.toFixed(3) }})</label>
-        <input
-          type="range"
-          v-model.number="params.freq"
-          min="0.001"
-          max="0.1"
-          step="0.001"
-        />
+        <input type="range" v-model.number="params.freq" min="0.001" max="0.1" step="0.001" />
       </div>
       <div class="control-group">
         <label>Amplitude ({{ params.amp }})</label>
-        <input
-          type="range"
-          v-model.number="params.amp"
-          min="1"
-          max="50"
-          step="1"
-        />
+        <input type="range" v-model.number="params.amp" min="1" max="50" step="1" />
       </div>
       <div class="control-group">
         <label>Octaves ({{ params.octaves }})</label>
-        <input
-          type="range"
-          v-model.number="params.octaves"
-          min="1"
-          max="6"
-          step="1"
-        />
+        <input type="range" v-model.number="params.octaves" min="1" max="6" step="1" />
       </div>
       <div class="control-group">
         <label>World Size ({{ params.worldSize }})</label>
-        <input
-          type="range"
-          v-model.number="params.worldSize"
-          min="20"
-          max="120"
-          step="5"
-        />
+        <input type="range" v-model.number="params.worldSize" min="20" max="120" step="5" />
       </div>
       <div class="control-group">
         <label>Seed ({{ params.seed }})</label>
@@ -76,26 +52,10 @@ const regenerateSeed = () => {
       </div>
     </aside>
     <main class="viewport-grid">
-      <VoxelWorld
-        title="TopLeft"
-        :params="params"
-        :genFunction="generateTopLeft"
-      />
-      <VoxelWorld
-        title="TopRight"
-        :params="params"
-        :genFunction="generateTopRight"
-      />
-      <VoxelWorld
-        title="BottomLeft"
-        :params="params"
-        :genFunction="generateBottomLeft"
-      />
-      <VoxelWorld
-        title="BottomRight"
-        :params="params"
-        :genFunction="generateBottomRight"
-      />
+      <VoxelWorld title="TopLeft" :params="params" :genFunction="generateTopLeft" />
+      <VoxelWorld title="TopRight" :params="params" :genFunction="generateTopRight" />
+      <VoxelWorld title="BottomLeft" :params="params" :genFunction="generateBottomLeft" />
+      <VoxelWorld title="BottomRight" :params="params" :genFunction="generateBottomRight" />
     </main>
   </div>
 </template>
