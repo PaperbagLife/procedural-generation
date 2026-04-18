@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch, onUnmounted } from "vue";
 import * as THREE from "three";
-import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls";
+import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import {
   BlockType,
   type TerrainParams,
