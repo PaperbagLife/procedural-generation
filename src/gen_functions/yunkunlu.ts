@@ -7,16 +7,16 @@ import NoiseModule from "noisejs";
 
 const Noise = (NoiseModule as any).Noise;
 
-const seaLevel = 60; // TODO: make tweakable in App.vue
-const seabedLevel = 30;
+const seaLevel = 65; // TODO: make tweakable in App.vue
+const seabedLevel = 45;
 
-// Set of `x,z` strings
-function getFloodedBlocks(
+function getTerrainSets(
   heightMap: Map<string, number>,
   size: number,
   seeds: BiomeSeed[],
-): Set<string> {
+) {
   const flooded = new Set<string>();
+  const beach = new Set<string>();
   const queue: [number, number][] = [];
   const dxdz = [
     [1, 0],
@@ -25,7 +25,7 @@ function getFloodedBlocks(
     [0, -1],
   ];
 
-  // Start the flood from every SEA biome coordinate
+  // Initial Flood Sources
   for (let x = 0; x < size; x++) {
     for (let z = 0; z < size; z++) {
       if (getBiome(x, z, seeds) === "SEA") {
@@ -36,57 +36,76 @@ function getFloodedBlocks(
     }
   }
 
-  // BFS to find connected low-lands
+  // BFS for Flooding
   let head = 0;
   while (head < queue.length) {
     const [x, z] = queue[head++];
-
     for (const [dx, dz] of dxdz) {
-      const nx = x + dx;
-      const nz = z + dz;
+      const nx = x + dx,
+        nz = z + dz;
       const nKey = `${nx},${nz}`;
-
       if (nx >= 0 && nx < size && nz >= 0 && nz < size && !flooded.has(nKey)) {
-        const h = heightMap.get(nKey) ?? 1000;
-        if (h < seaLevel) {
+        if ((heightMap.get(nKey) ?? 1000) < seaLevel) {
           flooded.add(nKey);
           queue.push([nx, nz]);
         }
       }
     }
   }
-  return flooded;
+
+  // Beach Detection
+  // Look for any dry tile adjacent to "overflow" water (water not in SEA biome)
+  for (const key of flooded) {
+    const [fx, fz] = key.split(",").map(Number);
+    if (getBiome(fx, fz, seeds) !== "SEA") {
+      for (const [dx, dz] of dxdz) {
+        const nx = fx + dx,
+          nz = fz + dz;
+        const nKey = `${nx},${nz}`;
+        // If the neighbor is dry land (not flooded), it's a beach
+        if (
+          nx >= 0 &&
+          nx < size &&
+          nz >= 0 &&
+          nz < size &&
+          !flooded.has(nKey)
+        ) {
+          beach.add(nKey);
+        }
+      }
+    }
+  }
+
+  return { flooded, beach };
 }
 
 function getBlockType(
   biome: BiomeType,
   isFlooded: boolean,
+  isBeach: boolean,
   y: number,
   height: number,
 ): BlockType {
-  // If Y is at or above the ground height, it must be water
-  // (This only triggers if the column is marked as flooded)
+  // Flooded with Water
   if (isFlooded && y >= height) return BlockType.WATER;
 
-  // Otherwise, determine the ground type
   const isSurface = y === height - 1;
   const isSubSurface = y >= height - 4;
 
+  // If it's a beach, the surface layers become sand
+  if (isBeach && isSubSurface) {
+    return BlockType.SAND;
+  }
+
+  // Normal Biome blocks
   switch (biome) {
     case "SEA":
-      return isSubSurface ? BlockType.SAND : BlockType.ROCK;
-    case "SNOW":
-      return isSurface
-        ? BlockType.SNOW
-        : isSubSurface
-          ? BlockType.DIRT
-          : BlockType.ROCK;
     case "GRASS":
-      return isSurface
-        ? BlockType.GRASS
-        : isSubSurface
-          ? BlockType.DIRT
-          : BlockType.ROCK;
+      if (isSurface) return isFlooded ? BlockType.SAND : BlockType.GRASS;
+      return isSubSurface ? BlockType.DIRT : BlockType.ROCK;
+    case "SNOW":
+      if (isSurface) return isFlooded ? BlockType.SAND : BlockType.SNOW;
+      return isSubSurface ? BlockType.DIRT : BlockType.ROCK;
     default:
       return BlockType.ROCK;
   }
@@ -112,9 +131,36 @@ export function getBiome(x: number, z: number, seeds: BiomeSeed[]): BiomeType {
   return closest;
 }
 
+function getFractalNoise(
+  x: number,
+  z: number,
+  noise: any,
+  p: TerrainParams,
+): number {
+  const { freq, amp, octaves = 4 } = p;
+  const persistence = 0.5; // Detail weight
+  const lacunarity = 2.0; // Frequency multiplier
+
+  let total = 0;
+  let currentFreq = freq;
+  let currentAmp = 1;
+  let weightSum = 0;
+
+  for (let i = 0; i < octaves; i++) {
+    total += noise.perlin2(x * currentFreq, z * currentFreq) * currentAmp;
+    weightSum += currentAmp;
+
+    currentAmp *= persistence;
+    currentFreq *= lacunarity;
+  }
+
+  // Normalize and scale
+  return (total / weightSum) * amp;
+}
+
 export function generateTopLeft(p: TerrainParams): BlockData[] {
   const blocks: BlockData[] = [];
-  const { worldSize: size, groundLevel, amp, freq, seed, worldHeight } = p;
+  const { worldSize: size, groundLevel, seed, worldHeight } = p;
   const noise = new Noise(seed);
 
   const seeds: BiomeSeed[] = [
@@ -128,21 +174,17 @@ export function generateTopLeft(p: TerrainParams): BlockData[] {
   for (let x = 0; x < size; x++) {
     for (let z = 0; z < size; z++) {
       const biome = getBiome(x, z, seeds);
-      if (biome === "SEA") {
-        const height = Math.floor(
-          noise.perlin2(x * freq, z * freq) * amp + seabedLevel,
-        );
-        heightMap.set(`${x},${z}`, height);
-        continue;
-      }
-      const height = Math.floor(
-        noise.perlin2(x * freq, z * freq) * amp + groundLevel,
-      );
+      const noiseVal = getFractalNoise(x, z, noise, p);
+
+      // Applying the offset based on biome
+      const baseLevel = biome === "SEA" ? seabedLevel : groundLevel;
+      const height = Math.floor(noiseVal + baseLevel);
       heightMap.set(`${x},${z}`, height);
     }
   }
+
   // find out which blocks will be overflowed by water with a simple bfs starting at the boundary
-  const flooded = getFloodedBlocks(heightMap, size, seeds);
+  const { flooded, beach } = getTerrainSets(heightMap, size, seeds);
 
   for (let x = 0; x < size; x++) {
     for (let z = 0; z < size; z++) {
@@ -150,14 +192,12 @@ export function generateTopLeft(p: TerrainParams): BlockData[] {
       const height = heightMap.get(key)!;
       const biome = getBiome(x, z, seeds);
       const isFlooded = flooded.has(key);
-
+      const isBeach = beach.has(key);
       const maxH = isFlooded ? Math.max(height, seaLevel) : height;
-      // Two cases, flooded or not
-      for (let y = 0; y < maxH; y++) {
-        // Changed from y <= maxH to y < maxH
-        if (y >= worldHeight) break;
 
-        const type = getBlockType(biome, isFlooded, y, height);
+      for (let y = 0; y < maxH; y++) {
+        if (y >= worldHeight) break;
+        const type = getBlockType(biome, isFlooded, isBeach, y, height);
         blocks.push({ x, y, z, type });
       }
     }
