@@ -58,12 +58,12 @@ const init = () => {
   const aspect = container.value.clientWidth / container.value.clientHeight;
   camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
   camera.position.set(
-    props.params.worldSize / 2,
-    props.params.worldSize + 10,
-    props.params.worldSize / 2,
+    props.params.worldSize + 30,
+    props.params.worldSize - 10,
+    props.params.worldSize - 10,
   );
 
-  camera.lookAt(props.params.worldSize / 2, 0, props.params.worldSize / 2);
+  camera.lookAt(props.params.worldSize / 2, 30, props.params.worldSize / 2);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.value.clientWidth, container.value.clientHeight);
