@@ -3,124 +3,38 @@ import {
   type TerrainParams,
   type BlockData,
 } from "../types/terrain";
+import NoiseModule from "noisejs";
+
+const Noise = (NoiseModule as any).Noise;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
-
-const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
-const lerp = (a: number, b: number, t: number) => a + t * (b - a);
-
-const grad = (hash: number, x: number, y: number, z: number) => {
-  const h = hash & 15;
-  const u = h < 8 ? x : y;
-  const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
-  return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
-};
-
-const buildPermutation = (seed: number) => {
-  const p = Array.from({ length: 256 }, (_, i) => i);
-  let state = seed >>> 0;
-
-  const next = () => {
-    state = (1664525 * state + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-
-  for (let i = p.length - 1; i > 0; i--) {
-    const j = Math.floor(next() * (i + 1));
-    const t = p[i];
-    p[i] = p[j];
-    p[j] = t;
-  }
-
-  const perm = new Array(512);
-  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
-  return perm;
-};
-
-const perlin3D = (perm: number[], x: number, y: number, z: number) => {
-  const xi = Math.floor(x) & 255;
-  const yi = Math.floor(y) & 255;
-  const zi = Math.floor(z) & 255;
-
-  const xf = x - Math.floor(x);
-  const yf = y - Math.floor(y);
-  const zf = z - Math.floor(z);
-
-  const u = fade(xf);
-  const v = fade(yf);
-  const w = fade(zf);
-
-  const aaa = perm[perm[perm[xi] + yi] + zi];
-  const aba = perm[perm[perm[xi] + yi + 1] + zi];
-  const aab = perm[perm[perm[xi] + yi] + zi + 1];
-  const abb = perm[perm[perm[xi] + yi + 1] + zi + 1];
-  const baa = perm[perm[perm[xi + 1] + yi] + zi];
-  const bba = perm[perm[perm[xi + 1] + yi + 1] + zi];
-  const bab = perm[perm[perm[xi + 1] + yi] + zi + 1];
-  const bbb = perm[perm[perm[xi + 1] + yi + 1] + zi + 1];
-
-  const x1 = lerp(grad(aaa, xf, yf, zf), grad(baa, xf - 1, yf, zf), u);
-  const x2 = lerp(
-    grad(aba, xf, yf - 1, zf),
-    grad(bba, xf - 1, yf - 1, zf),
-    u,
-  );
-  const y1 = lerp(x1, x2, v);
-
-  const x3 = lerp(
-    grad(aab, xf, yf, zf - 1),
-    grad(bab, xf - 1, yf, zf - 1),
-    u,
-  );
-  const x4 = lerp(
-    grad(abb, xf, yf - 1, zf - 1),
-    grad(bbb, xf - 1, yf - 1, zf - 1),
-    u,
-  );
-  const y2 = lerp(x3, x4, v);
-
-  // Normalized output is approximately in [-1, 1].
-  return lerp(y1, y2, w);
-};
-
-const fbmPerlin3D = (
-  perm: number[],
-  x: number,
-  y: number,
-  z: number,
-  octaves: number,
-) => {
-  let total = 0;
-  let amplitude = 1;
-  let frequency = 1;
-  let normalization = 0;
-
-  for (let i = 0; i < octaves; i++) {
-    total += perlin3D(perm, x * frequency, y * frequency, z * frequency) * amplitude;
-    normalization += amplitude;
-    amplitude *= 0.5;
-    frequency *= 2;
-  }
-
-  return normalization === 0 ? 0 : total / normalization;
-};
 
 type Biome = "snow" | "grass" | "forest";
 
 export function generateTopRight(p: TerrainParams): BlockData[] {
   const blocks: BlockData[] = [];
-  const perm = buildPermutation(p.seed + 1337);
+  const noiseGen = new Noise(p.seed + 1337);
+  const fbmPerlin3D = (x: number, y: number, z: number, octaves: number) => {
+    let total = 0, amplitude = 1, frequency = 1, normalization = 0;
+    for (let i = 0; i < octaves; i++) {
+      total += noiseGen.perlin3(x * frequency, y * frequency, z * frequency) * amplitude;
+      normalization += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    return normalization === 0 ? 0 : total / normalization;
+  };
 
-  const baseHeight = p.groundLevel;
-  const terrainScale = Math.max(0.001, p.freq);
-  const heightVariation = Math.max(4, p.amp);
-  const snowLine = baseHeight + Math.floor(heightVariation * 0.34);
+  const baseHeight = Math.max(1, p.groundLevel - 15);
+  const terrainScale = Math.max(0.001, p.freq * 6);
+  const heightVariation = Math.max(4, p.amp * 2);
+  const snowLine = baseHeight + Math.floor(heightVariation * 0.28);
   const rockLine = baseHeight + Math.floor(heightVariation * 0.08);
   const maxSurface = p.worldHeight - 1;
   const minSurface = 1;
   const targetRiverRatio = 0.06;
-  const targetSnowRatio = 0.28;
+
   const targetForestRatio = 0.22;
 
   const heightMap = Array.from({ length: p.worldSize }, () =>
@@ -152,13 +66,14 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
   let minMoisture = Number.POSITIVE_INFINITY;
   let maxMoisture = Number.NEGATIVE_INFINITY;
 
+  // pre-calculate river
   for (let x = 0; x < p.worldSize; x++) {
     const nx = x * terrainScale;
     const drift = Math.sin(x * 0.11) * (p.worldSize * 0.12);
     const centerNoise =
-      fbmPerlin3D(perm, nx * 0.08 + 12.3, 35.7, 4.6, 2) * (p.worldSize * 0.09);
+      fbmPerlin3D(nx * 0.08 + 12.3, 35.7, 4.6, 2) * (p.worldSize * 0.09);
     riverCenter[x] = clamp(p.worldSize * 0.5 + drift + centerNoise, 3, p.worldSize - 4);
-    riverWidth[x] = 2.0 + (fbmPerlin3D(perm, nx * 0.1 - 9.1, 17.8, 3.4, 2) + 1) * 0.9;
+    riverWidth[x] = 2.0 + (fbmPerlin3D(nx * 0.1 - 9.1, 17.8, 3.4, 2) + 1) * 0.9;
   }
 
   // Biome-first: generate height, temperature, moisture, then classify biome.
@@ -167,29 +82,29 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       const nx = x * terrainScale;
       const nz = z * terrainScale;
 
-      const continental = fbmPerlin3D(perm, nx * 0.32, 13.4, nz * 0.32, p.octaves);
-      const ridged = 1 - Math.abs(fbmPerlin3D(perm, nx * 1.1, 29.1, nz * 1.1, 4));
-      const detail = fbmPerlin3D(perm, nx * 0.88, 53.2, nz * 0.88, 3);
-      const valley = fbmPerlin3D(perm, nx * 0.18 + 6.1, 84.2, nz * 0.18 - 7.3, 2);
+      const continental = fbmPerlin3D(nx * 0.32, 13.4, nz * 0.32, p.octaves);
+      const ridged = 1 - Math.abs(fbmPerlin3D(nx * 1.1, 29.1, nz * 1.1, 4));
+      const detail = fbmPerlin3D(nx * 0.88, 53.2, nz * 0.88, 3);
+      const valley = fbmPerlin3D(nx * 0.18 + 6.1, 84.2, nz * 0.18 - 7.3, 2);
       const mountainCore = Math.max(
         0,
-        fbmPerlin3D(perm, nx * 0.11 + 41.7, 16.8, nz * 0.11 - 23.4, 3),
+        fbmPerlin3D(nx * 0.11 + 41.7, 16.8, nz * 0.11 - 23.4, 3),
       );
       const mountainShape = Math.pow(mountainCore, 1.8);
       const mountainMask = Math.pow(
-        Math.max(0, fbmPerlin3D(perm, nx * 0.07 - 9.4, 61.2, nz * 0.07 + 18.5, 2)),
+        Math.max(0, fbmPerlin3D(nx * 0.07 - 9.4, 61.2, nz * 0.07 + 18.5, 2)),
         2.2,
       );
 
       const surfaceHeight = clamp(
         Math.round(
-          baseHeight - 8 +
-            continental * heightVariation * 0.38 +
-            ridged * heightVariation * 0.72 +
-            detail * heightVariation * 0.2 +
-            valley * heightVariation * 0.12 +
-            mountainShape * heightVariation * 1.35 +
-            mountainMask * heightVariation * 2.0,
+          baseHeight - 15 +
+            continental * heightVariation * 0.15 +
+            ridged * mountainMask * heightVariation * 1.8 +
+            detail * heightVariation * 0.08 +
+            valley * heightVariation * 0.05 +
+            mountainShape * heightVariation * 3.0 +
+            mountainMask * heightVariation * 4.5,
         ),
         minSurface,
         maxSurface,
@@ -199,10 +114,10 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
 
       const normalizedHeight = (surfaceHeight - baseHeight) / Math.max(1, heightVariation);
       const temperature =
-        fbmPerlin3D(perm, nx * 0.14 + 17.9, 73.3, nz * 0.14 - 9.6, 3) -
+        fbmPerlin3D(nx * 0.14 + 17.9, 73.3, nz * 0.14 - 9.6, 3) -
         normalizedHeight * 0.48 -
         mountainMask * 0.22;
-      const moisture = fbmPerlin3D(perm, nx * 0.16 - 7.4, 41.5, nz * 0.16 + 21.8, 3);
+      const moisture = fbmPerlin3D(nx * 0.16 - 7.4, 41.5, nz * 0.16 + 21.8, 3);
 
       temperatureMap[x][z] = temperature;
       moistureMap[x][z] = moisture;
@@ -211,8 +126,6 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       if (temperature > maxTemp) maxTemp = temperature;
       if (moisture < minMoisture) minMoisture = moisture;
       if (moisture > maxMoisture) maxMoisture = moisture;
-
-      biomeMap[x][z] = "grass";
     }
   }
 
@@ -248,52 +161,37 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
   const tempRange = Math.max(0.0001, maxTemp - minTemp);
   const moistureRange = Math.max(0.0001, maxMoisture - minMoisture);
 
-  const nonRiverCells: Array<{ x: number; z: number; snowScore: number; forestScore: number }> = [];
+  // Assign snow biome by height — consistent with block placement logic
+  for (let x = 0; x < p.worldSize; x++) {
+    for (let z = 0; z < p.worldSize; z++) {
+      if (heightMap[x][z] >= snowLine - 12) {
+        biomeMap[x][z] = "snow";
+      }
+    }
+  }
+
+  const nonRiverCells: Array<{ x: number; z: number; forestScore: number }> = [];
 
   for (let x = 0; x < p.worldSize; x++) {
     for (let z = 0; z < p.worldSize; z++) {
-      if (riverMap[x][z]) {
-        biomeMap[x][z] = "grass";
-        continue;
-      }
+      if (riverMap[x][z]) continue;
+      if (biomeMap[x][z] === "snow") continue;
 
-      const nx = x * terrainScale;
-      const nz = z * terrainScale;
       const surfaceHeight = heightMap[x][z];
       const normalizedHeight = (surfaceHeight - baseHeight) / Math.max(1, heightVariation);
       const tempN = (temperatureMap[x][z] - minTemp) / tempRange;
       const moistureN = (moistureMap[x][z] - minMoisture) / moistureRange;
-      const biomeNoise = fbmPerlin3D(perm, nx * 0.09 + 31.2, 11.7, nz * 0.09 - 27.4, 2);
-      const snowScore =
-        normalizedHeight * 0.5 +
-        (1 - tempN) * 0.48 +
-        Math.max(0, normalizedHeight - 0.25) * 0.25 +
-        ((biomeNoise + 1) * 0.5) * 0.15;
       const forestBand = 1 - Math.abs(normalizedHeight - 0.15);
       const forestScore = moistureN * 0.55 + tempN * 0.25 + forestBand * 0.2;
 
-      nonRiverCells.push({ x, z, snowScore, forestScore });
-      biomeMap[x][z] = "grass";
+      nonRiverCells.push({ x, z, forestScore });
     }
   }
 
-  const snowCount = Math.floor(nonRiverCells.length * targetSnowRatio);
   const forestCount = Math.floor(nonRiverCells.length * targetForestRatio);
-
-  const snowSorted = [...nonRiverCells].sort((a, b) => b.snowScore - a.snowScore);
-  const snowSet = new Set<string>();
-  for (let i = 0; i < snowCount && i < snowSorted.length; i++) {
-    const cell = snowSorted[i];
-    snowSet.add(`${cell.x},${cell.z}`);
-    biomeMap[cell.x][cell.z] = "snow";
-  }
-
-  const forestCandidates = nonRiverCells
-    .filter((cell) => !snowSet.has(`${cell.x},${cell.z}`))
-    .sort((a, b) => b.forestScore - a.forestScore);
+  const forestCandidates = [...nonRiverCells].sort((a, b) => b.forestScore - a.forestScore);
   for (let i = 0; i < forestCount && i < forestCandidates.length; i++) {
-    const cell = forestCandidates[i];
-    biomeMap[cell.x][cell.z] = "forest";
+    biomeMap[forestCandidates[i].x][forestCandidates[i].z] = "forest";
   }
 
   for (let x = 0; x < p.worldSize; x++) {
@@ -304,13 +202,7 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       const carveStrength = riverMap[x][z]
         ? riverStrengthMap[x][z]
         : clamp(1 - (riverDist - riverEdge) / 1.8, 0, 1);
-      const riverNoise = fbmPerlin3D(
-        perm,
-        x * terrainScale * 0.75,
-        67.2,
-        z * terrainScale * 0.75,
-        2,
-      );
+      const riverNoise = fbmPerlin3D(x * terrainScale * 0.75, 67.2, z * terrainScale * 0.75, 2);
       const isRiver = riverMap[x][z];
       const riverDepth = isRiver
         ? Math.round(1 + carveStrength * 1.2 + (riverNoise > 0.2 ? 1 : 0))
@@ -323,14 +215,37 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       if (!isRiver && carveStrength > 0.25) {
         terrainTop = clamp(terrainTop - 1, minSurface, maxSurface);
       }
-      const biome = biomeMap[x][z];
       heightMap[x][z] = terrainTop;
 
       for (let y = 0; y <= terrainTop; y++) {
         let type: BlockData["type"] = BlockType.ROCK;
 
         if (y === terrainTop) {
-          type = biome === "snow" ? BlockType.SNOW : BlockType.GRASS;
+          const nearWater = !isRiver && carveStrength > 0.1 && terrainTop < snowLine - 12;
+          let slope = 0;
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              const nx = clamp(x + dx, 0, p.worldSize - 1);
+              const nz = clamp(z + dz, 0, p.worldSize - 1);
+              slope = Math.max(slope, Math.abs(heightMap[nx][nz] - terrainTop));
+            }
+          }
+          if (nearWater) {
+            type = BlockType.SAND;
+          } else if (slope >= 3) {
+            type = BlockType.ROCK;
+          } else {
+            const transitionWidth = 12;
+            const snowFactor = clamp((terrainTop - (snowLine - transitionWidth)) / transitionWidth, 0, 1);
+            if (snowFactor >= 1) {
+              type = BlockType.SNOW;
+            } else if (snowFactor > 0) {
+              const patchNoise = fbmPerlin3D(x * terrainScale * 4 + 5.5, 88.4, z * terrainScale * 4 - 3.1, 2);
+              type = patchNoise < snowFactor * 2 - 1 ? BlockType.SNOW : BlockType.GRASS;
+            } else {
+              type = BlockType.GRASS;
+            }
+          }
         } else if (y >= terrainTop - 2) {
           type = BlockType.DIRT;
         } else if (y >= rockLine) {
@@ -383,7 +298,7 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
   const placeTree = (x: number, z: number) => {
     const nx = x * terrainScale;
     const nz = z * terrainScale;
-    const treeSeed = fbmPerlin3D(perm, nx * 1.35 + 8.9, 93.7, nz * 1.35 - 4.2, 3);
+    const treeSeed = fbmPerlin3D(nx * 1.35 + 8.9, 93.7, nz * 1.35 - 4.2, 3);
     const topY = heightMap[x][z];
     if (topY >= snowLine) return false;
     const trunkHeight = treeSeed > 0.45 ? 5 : 4;
@@ -435,7 +350,7 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       const slope = localSlope(x, z);
       if (slope > 3) continue;
 
-      const s = fbmPerlin3D(perm, nx * 1.2 + 5.7, 19.1, nz * 1.2 - 2.3, 2);
+      const s = fbmPerlin3D(nx * 1.2 + 5.7, 19.1, nz * 1.2 - 2.3, 2);
       const moistureScore = moistureMap[x][z] * 0.35;
 
       if (biomeMap[x][z] === "forest") {
