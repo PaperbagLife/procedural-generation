@@ -16,9 +16,14 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
   const blocks: BlockData[] = [];
   const noiseGen = new Noise(p.seed + 1337);
   const fbmPerlin3D = (x: number, y: number, z: number, octaves: number) => {
-    let total = 0, amplitude = 1, frequency = 1, normalization = 0;
+    let total = 0,
+      amplitude = 1,
+      frequency = 1,
+      normalization = 0;
     for (let i = 0; i < octaves; i++) {
-      total += noiseGen.perlin3(x * frequency, y * frequency, z * frequency) * amplitude;
+      total +=
+        noiseGen.perlin3(x * frequency, y * frequency, z * frequency) *
+        amplitude;
       normalization += amplitude;
       amplitude *= 0.5;
       frequency *= 2;
@@ -72,7 +77,11 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
     const drift = Math.sin(x * 0.11) * (p.worldSize * 0.12);
     const centerNoise =
       fbmPerlin3D(nx * 0.08 + 12.3, 35.7, 4.6, 2) * (p.worldSize * 0.09);
-    riverCenter[x] = clamp(p.worldSize * 0.5 + drift + centerNoise, 3, p.worldSize - 4);
+    riverCenter[x] = clamp(
+      p.worldSize * 0.5 + drift + centerNoise,
+      3,
+      p.worldSize - 4,
+    );
     riverWidth[x] = 2.0 + (fbmPerlin3D(nx * 0.1 - 9.1, 17.8, 3.4, 2) + 1) * 0.9;
   }
 
@@ -98,7 +107,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
 
       const surfaceHeight = clamp(
         Math.round(
-          baseHeight - 15 +
+          baseHeight -
+            15 +
             continental * heightVariation * 0.15 +
             ridged * mountainMask * heightVariation * 1.8 +
             detail * heightVariation * 0.08 +
@@ -112,7 +122,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
 
       heightMap[x][z] = surfaceHeight;
 
-      const normalizedHeight = (surfaceHeight - baseHeight) / Math.max(1, heightVariation);
+      const normalizedHeight =
+        (surfaceHeight - baseHeight) / Math.max(1, heightVariation);
       const temperature =
         fbmPerlin3D(nx * 0.14 + 17.9, 73.3, nz * 0.14 - 9.6, 3) -
         normalizedHeight * 0.48 -
@@ -154,7 +165,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
 
   for (let x = 0; x < p.worldSize; x++) {
     for (let z = 0; z < p.worldSize; z++) {
-      riverMap[x][z] = riverStrengthMap[x][z] >= riverThreshold && riverStrengthMap[x][z] > 0;
+      riverMap[x][z] =
+        riverStrengthMap[x][z] >= riverThreshold && riverStrengthMap[x][z] > 0;
     }
   }
 
@@ -170,7 +182,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
     }
   }
 
-  const nonRiverCells: Array<{ x: number; z: number; forestScore: number }> = [];
+  const nonRiverCells: Array<{ x: number; z: number; forestScore: number }> =
+    [];
 
   for (let x = 0; x < p.worldSize; x++) {
     for (let z = 0; z < p.worldSize; z++) {
@@ -178,7 +191,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       if (biomeMap[x][z] === "snow") continue;
 
       const surfaceHeight = heightMap[x][z];
-      const normalizedHeight = (surfaceHeight - baseHeight) / Math.max(1, heightVariation);
+      const normalizedHeight =
+        (surfaceHeight - baseHeight) / Math.max(1, heightVariation);
       const tempN = (temperatureMap[x][z] - minTemp) / tempRange;
       const moistureN = (moistureMap[x][z] - minMoisture) / moistureRange;
       const forestBand = 1 - Math.abs(normalizedHeight - 0.15);
@@ -189,7 +203,9 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
   }
 
   const forestCount = Math.floor(nonRiverCells.length * targetForestRatio);
-  const forestCandidates = [...nonRiverCells].sort((a, b) => b.forestScore - a.forestScore);
+  const forestCandidates = [...nonRiverCells].sort(
+    (a, b) => b.forestScore - a.forestScore,
+  );
   for (let i = 0; i < forestCount && i < forestCandidates.length; i++) {
     biomeMap[forestCandidates[i].x][forestCandidates[i].z] = "forest";
   }
@@ -202,15 +218,28 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       const carveStrength = riverMap[x][z]
         ? riverStrengthMap[x][z]
         : clamp(1 - (riverDist - riverEdge) / 1.8, 0, 1);
-      const riverNoise = fbmPerlin3D(x * terrainScale * 0.75, 67.2, z * terrainScale * 0.75, 2);
+      const riverNoise = fbmPerlin3D(
+        x * terrainScale * 0.75,
+        67.2,
+        z * terrainScale * 0.75,
+        2,
+      );
       const isRiver = riverMap[x][z];
       const riverDepth = isRiver
         ? Math.round(1 + carveStrength * 1.2 + (riverNoise > 0.2 ? 1 : 0))
         : 0;
-      const localWaterTop = clamp(surfaceHeight - 1, minSurface + 1, maxSurface);
+      const localWaterTop = clamp(
+        surfaceHeight - 1,
+        minSurface + 1,
+        maxSurface,
+      );
       const localRiverBed = clamp(localWaterTop - 1, minSurface, maxSurface);
       let terrainTop = isRiver
-        ? clamp(localRiverBed - Math.max(0, riverDepth - 1), minSurface, maxSurface)
+        ? clamp(
+            localRiverBed - Math.max(0, riverDepth - 1),
+            minSurface,
+            maxSurface,
+          )
         : surfaceHeight;
       if (!isRiver && carveStrength > 0.25) {
         terrainTop = clamp(terrainTop - 1, minSurface, maxSurface);
@@ -221,7 +250,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
         let type: BlockData["type"] = BlockType.ROCK;
 
         if (y === terrainTop) {
-          const nearWater = !isRiver && carveStrength > 0.1 && terrainTop < snowLine - 12;
+          const nearWater =
+            !isRiver && carveStrength > 0.1 && terrainTop < snowLine - 12;
           let slope = 0;
           for (let dx = -1; dx <= 1; dx++) {
             for (let dz = -1; dz <= 1; dz++) {
@@ -236,12 +266,24 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
             type = BlockType.ROCK;
           } else {
             const transitionWidth = 12;
-            const snowFactor = clamp((terrainTop - (snowLine - transitionWidth)) / transitionWidth, 0, 1);
+            const snowFactor = clamp(
+              (terrainTop - (snowLine - transitionWidth)) / transitionWidth,
+              0,
+              1,
+            );
             if (snowFactor >= 1) {
               type = BlockType.SNOW;
             } else if (snowFactor > 0) {
-              const patchNoise = fbmPerlin3D(x * terrainScale * 4 + 5.5, 88.4, z * terrainScale * 4 - 3.1, 2);
-              type = patchNoise < snowFactor * 2 - 1 ? BlockType.SNOW : BlockType.GRASS;
+              const patchNoise = fbmPerlin3D(
+                x * terrainScale * 4 + 5.5,
+                88.4,
+                z * terrainScale * 4 - 3.1,
+                2,
+              );
+              type =
+                patchNoise < snowFactor * 2 - 1
+                  ? BlockType.SNOW
+                  : BlockType.GRASS;
             } else {
               type = BlockType.GRASS;
             }
@@ -256,7 +298,11 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       }
 
       if (isRiver) {
-        const waterTop = clamp(Math.max(localWaterTop, terrainTop + 1), minSurface + 1, maxSurface);
+        const waterTop = clamp(
+          Math.max(localWaterTop, terrainTop + 1),
+          minSurface + 1,
+          maxSurface,
+        );
         for (let y = terrainTop + 1; y <= waterTop; y++) {
           blocks.push({ x, y, z, type: BlockType.WATER });
         }
@@ -270,7 +316,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
         if (dx === 0 && dz === 0) continue;
         const nx = cx + dx;
         const nz = cz + dz;
-        if (nx < 0 || nx >= p.worldSize || nz < 0 || nz >= p.worldSize) continue;
+        if (nx < 0 || nx >= p.worldSize || nz < 0 || nz >= p.worldSize)
+          continue;
         if (treeMask[nx][nz]) return true;
       }
     }
@@ -285,7 +332,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       for (let dz = -1; dz <= 1; dz++) {
         const nx = cx + dx;
         const nz = cz + dz;
-        if (nx < 0 || nx >= p.worldSize || nz < 0 || nz >= p.worldSize) continue;
+        if (nx < 0 || nx >= p.worldSize || nz < 0 || nz >= p.worldSize)
+          continue;
         const h = heightMap[nx][nz];
         if (h < minH) minH = h;
         if (h > maxH) maxH = h;
@@ -323,7 +371,8 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
           const lz = z + dz;
           const ly = leafBase + dy;
 
-          if (lx < 0 || lx >= p.worldSize || lz < 0 || lz >= p.worldSize) continue;
+          if (lx < 0 || lx >= p.worldSize || lz < 0 || lz >= p.worldSize)
+            continue;
           if (ly >= p.worldHeight) continue;
           if (ly <= heightMap[lx][lz] + 1) continue;
 
@@ -356,7 +405,21 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
       if (biomeMap[x][z] === "forest") {
         forestCells.push({ x, z, score: s + moistureScore });
       } else if (biomeMap[x][z] === "grass") {
-        grassFallbackCells.push({ x, z, score: s + moistureScore - Math.max(0, normalizedHeightPenalty(heightMap[x][z], baseHeight, heightVariation)) });
+        grassFallbackCells.push({
+          x,
+          z,
+          score:
+            s +
+            moistureScore -
+            Math.max(
+              0,
+              normalizedHeightPenalty(
+                heightMap[x][z],
+                baseHeight,
+                heightVariation,
+              ),
+            ),
+        });
       }
     }
   }
@@ -375,7 +438,11 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
     if (placeTree(cell.x, cell.z)) placedTrees++;
   }
 
-  for (let i = 0; i < grassFallbackCells.length && placedTrees < targetTrees; i++) {
+  for (
+    let i = 0;
+    i < grassFallbackCells.length && placedTrees < targetTrees;
+    i++
+  ) {
     const cell = grassFallbackCells[i];
     if (hasNearbyTree(cell.x, cell.z, 2)) continue;
     if (placeTree(cell.x, cell.z)) placedTrees++;
