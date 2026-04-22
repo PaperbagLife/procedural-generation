@@ -360,13 +360,17 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
     }
 
     const leafBase = topY + trunkHeight - 1;
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        for (let dy = 0; dy <= 2; dy++) {
-          const manhattan = Math.abs(dx) + Math.abs(dz);
-          const canopyLimit = dy === 2 ? 0 : 1;
-          if (manhattan > canopyLimit) continue;
+    // Low frequency = smooth blob-like variation rather than random holes
+    const leafScale = 0.22;
+    const treeOffsetX = (x * 73.1) % 97;
+    const treeOffsetZ = (z * 31.7) % 97;
+    // Horizontal radius per layer dy=0(bottom)..3(top): wide base tapering up
+    const layerRadius = [2, 4, 2.3, 1.5];
 
+    for (let dy = 0; dy <= 3; dy++) {
+      const maxRadius = layerRadius[dy];
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
           const lx = x + dx;
           const lz = z + dz;
           const ly = leafBase + dy;
@@ -376,12 +380,23 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
           if (ly >= p.worldHeight) continue;
           if (ly <= heightMap[lx][lz] + 1) continue;
 
-          blocks.push({
-            x: lx,
-            y: ly,
-            z: lz,
-            type: BlockType.LEAVES,
-          });
+          const horizDist = Math.sqrt(dx * dx + dz * dz);
+          if (horizDist > maxRadius + 0.5) continue;
+
+          const distRatio = horizDist / maxRadius;
+          // Inner 50% of radius: always place to guarantee solid canopy core
+          // Outer 50%: noise trimming creates organic silhouette
+          if (distRatio > 0.5) {
+            const noiseVal = noiseGen.perlin3(
+              lx * leafScale + treeOffsetX,
+              ly * leafScale * 0.5,
+              lz * leafScale + treeOffsetZ,
+            );
+            // threshold 0 at distRatio=0.5, ~0.7 at distRatio=1.0
+            if (noiseVal < (distRatio - 0.5) * 1.4) continue;
+          }
+
+          blocks.push({ x: lx, y: ly, z: lz, type: BlockType.LEAVES });
         }
       }
     }
@@ -428,13 +443,16 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
   grassFallbackCells.sort((a, b) => b.score - a.score);
   const targetTrees = Math.max(
     12,
-    Math.floor(p.worldSize * p.worldSize * 0.03),
+    Math.floor(p.worldSize * p.worldSize * 0.004),
   );
   let placedTrees = 0;
 
+  // Spacing must be >= max leaf radius so canopy cores never overlap
+  const treeSpacing = 4;
+
   for (let i = 0; i < forestCells.length && placedTrees < targetTrees; i++) {
     const cell = forestCells[i];
-    if (hasNearbyTree(cell.x, cell.z, 2)) continue;
+    if (hasNearbyTree(cell.x, cell.z, treeSpacing)) continue;
     if (placeTree(cell.x, cell.z)) placedTrees++;
   }
 
@@ -444,7 +462,7 @@ export function generateTopRight(p: TerrainParams): BlockData[] {
     i++
   ) {
     const cell = grassFallbackCells[i];
-    if (hasNearbyTree(cell.x, cell.z, 2)) continue;
+    if (hasNearbyTree(cell.x, cell.z, treeSpacing)) continue;
     if (placeTree(cell.x, cell.z)) placedTrees++;
   }
 
