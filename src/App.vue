@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import VoxelWorld from "./components/VoxelWorld.vue";
-import { type TerrainParams } from "./types/terrain";
+import { type TerrainParams, type CameraTransform } from "./types/terrain";
 
 import { generateTopLeft } from "./gen_functions/yunkunlu";
 import { generateTopRight } from "./gen_functions/kaijielai";
@@ -13,7 +13,8 @@ const toggleTopLeft = () => {
   isTopLeftExpanded.value = !isTopLeftExpanded.value;
 };
 
-// --- State ---
+
+// --- Terrain State ---
 const params = reactive<TerrainParams>({
   freq: 0.015,
   amp: 25,
@@ -35,6 +36,21 @@ const params = reactive<TerrainParams>({
   seed: Date.now(),
 });
 
+// --- Sync State ---
+const isSyncEnabled = ref(true);
+const sharedTransform = ref<CameraTransform>({
+  position: [params.worldSize + 30, params.worldSize - 10, params.worldSize],
+  quaternion: [-0.25, 0.5, 0.16, 0.8],
+});
+
+const onCameraUpdate = (payload: CameraTransform) => {
+  if (isSyncEnabled.value) {
+    sharedTransform.value = payload;
+    console.log("Camera updated:", payload);
+  }
+};
+
+
 const regenerateSeed = () => {
   params.seed = Date.now();
 };
@@ -43,12 +59,20 @@ const regenerateSeed = () => {
 <template>
   <div class="app-container">
     <aside class="sidebar">
+      <div class="control-group sync-panel">
+        <label class="checkbox-label">
+          <input type="checkbox" v-model="isSyncEnabled" />
+          Sync Cameras
+        </label>
+      </div>
+
       <div class="control-group">
         <label>Seed ({{ params.seed }})</label>
         <button class="regen-button" type="button" @click="regenerateSeed">
           Generate
         </button>
       </div>
+
       <div class="control-group">
         <label>Frequency ({{ params.freq.toFixed(3) }})</label>
         <input type="range" v-model.number="params.freq" min="0.001" max="0.1" step="0.001" />
@@ -69,9 +93,10 @@ const regenerateSeed = () => {
         <label>Ground Level ({{ params.groundLevel }})</label>
         <input type="range" v-model.number="params.groundLevel" :min="10" :max="params.worldHeight - 10" step="1" />
       </div>
+
       <div class="foldable-container">
         <div class="foldable-header" @click="toggleTopLeft">
-          <span>Top Left Controls</span>
+          <span>Detailed Controls</span>
           <span class="arrow" :class="{ 'arrow-rotated': !isTopLeftExpanded }">▼</span>
         </div>
 
@@ -82,29 +107,24 @@ const regenerateSeed = () => {
               <input type="range" v-model.number="params.seaParms.seaLevel" :min="10" :max="params.groundLevel"
                 step="1" />
             </div>
-
             <div class="control-group">
               <label>Seabed Level ({{ params.seaParms.seabedLevel }})</label>
               <input type="range" v-model.number="params.seaParms.seabedLevel" :min="5"
                 :max="params.seaParms.seaLevel - 5" step="1" />
             </div>
-
             <div class="control-group">
               <label>Cave Threshold ({{ params.caveParams.caveThreshold.toFixed(2) }})</label>
               <input type="range" v-model.number="params.caveParams.caveThreshold" min="-0.5" max="0.5" step="0.01" />
             </div>
-
             <div class="control-group">
               <label>Cave Frequency ({{ params.caveParams.caveFreq.toFixed(3) }})</label>
               <input type="range" v-model.number="params.caveParams.caveFreq" min="0.01" max="0.1" step="0.005" />
             </div>
-
             <div class="control-group">
               <label>Cave Safety Buffer ({{ params.caveParams.caveSafetyBuffer }})</label>
               <input type="range" v-model.number="params.caveParams.caveSafetyBuffer" min="0"
                 :max="params.worldHeight / 2" step="1" />
             </div>
-
             <div class="control-group">
               <label>Tunnel Width ({{ (params.caveParams.tunnelWidth * 100).toFixed(1) }}%)</label>
               <input type="range" v-model.number="params.caveParams.tunnelWidth" min="0.05" max="0.3" step="0.01" />
@@ -113,22 +133,22 @@ const regenerateSeed = () => {
         </transition>
       </div>
     </aside>
+
     <main class="viewport-grid">
-      <VoxelWorld title="TopLeft" :params="params" :genFunction="generateTopLeft" />
-      <VoxelWorld title="TopRight" :params="params" :genFunction="generateTopRight" />
-      <VoxelWorld title="BottomLeft" :params="params" :genFunction="generateBottomLeft" />
-      <VoxelWorld title="BottomRight" :params="params" :genFunction="generateBottomRight" />
+      <VoxelWorld title="TopLeft" :params="params" :genFunction="generateTopLeft" :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
+      <VoxelWorld title="TopRight" :params="params" :genFunction="generateTopRight" :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
+      <VoxelWorld title="BottomLeft" :params="params" :genFunction="generateBottomLeft" :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
+      <VoxelWorld title="BottomRight" :params="params" :genFunction="generateBottomRight" :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
     </main>
   </div>
 </template>
 
 <style>
-.viewport-grid>* {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
+/* Existing styles */
 .viewport-grid {
   flex: 1;
   display: grid;
@@ -137,6 +157,12 @@ const regenerateSeed = () => {
   gap: 2px;
   background: #333;
   height: 100%;
+}
+
+.viewport-grid>* {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 html,
@@ -150,6 +176,7 @@ body {
   margin: 0;
   overflow: hidden;
   background: #000;
+  font-family: sans-serif;
 }
 
 .app-container {
@@ -171,13 +198,19 @@ body {
   overflow-y: auto;
 }
 
-.viewport-grid {
-  flex-grow: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 2px;
-  background: #333;
+.sync-panel {
+  background: #2c3e50;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #34495e;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 .control-group {
@@ -199,15 +232,6 @@ body {
   background: #3a3a3a;
 }
 
-.regen-button:active {
-  transform: translateY(1px);
-}
-
-input[type="range"] {
-  width: 100%;
-}
-
-/* Foldable Header */
 .foldable-header {
   display: flex;
   justify-content: space-between;
@@ -222,10 +246,6 @@ input[type="range"] {
   border: 1px solid #333;
 }
 
-.foldable-header:hover {
-  background: #3a3a3a;
-}
-
 .arrow {
   font-size: 0.7rem;
   transition: transform 0.3s ease;
@@ -235,19 +255,10 @@ input[type="range"] {
   transform: rotate(-90deg);
 }
 
-.foldable-content {
-  padding: 10px 5px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-/* Transition Animation */
 .fold-enter-active,
 .fold-leave-active {
   transition: all 0.3s ease-in-out;
-  max-height: 500px;
-  /* Adjust based on content size */
+  max-height: 600px;
   overflow: hidden;
 }
 
@@ -255,7 +266,5 @@ input[type="range"] {
 .fold-leave-to {
   max-height: 0;
   opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
 }
 </style>

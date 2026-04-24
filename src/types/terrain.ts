@@ -19,11 +19,11 @@ export type SeaParams = {
 };
 
 export type CaveParams = {
-  caveThreshold: number; // -1 to 1 range, lower = less caves, higher = more caves
-  caveFreq: number; // Frequency of the noise used for caves
-  caveSafetyBuffer: number; // how many blocks under the surface starts to become caves
-  tunnelOffset: number; // Large offset to decorrelate from cavern noise
-  tunnelWidth: number; // Closer to 0 = thinner tunnels
+  caveThreshold: number;
+  caveFreq: number;
+  caveSafetyBuffer: number;
+  tunnelOffset: number;
+  tunnelWidth: number;
 };
 
 export interface TerrainParams {
@@ -52,6 +52,12 @@ export interface BlockMaterial {
 }
 
 export type GenFunction = (params: TerrainParams) => BlockData[];
+
+// New type for camera synchronization
+export interface CameraTransform {
+  position: [number, number, number];
+  quaternion: [number, number, number, number];
+}
 
 export const BLOCK_COLORS: Record<number, BlockMaterial> = {
   [BlockType.GRASS]: { color: 0x559944 },
