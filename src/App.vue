@@ -96,7 +96,7 @@ const regenerateSeed = () => {
 
       <div class="foldable-container">
         <div class="foldable-header" @click="toggleTopLeft">
-          <span>Detailed Controls</span>
+          <span>Controls for top left viewport</span>
           <span class="arrow" :class="{ 'arrow-rotated': !isTopLeftExpanded }">▼</span>
         </div>
 
