@@ -7,16 +7,6 @@ import NoiseModule from "noisejs";
 
 const Noise = (NoiseModule as any).Noise;
 
-// WATER LEVELS
-const seaLevel = 60; // TODO: make tweakable in App.vue
-const seabedLevel = 40;
-const beachHeightMax = 63;
-
-// CAVES
-const caveThreshold = 0.1;
-const caveFreq = 0.08;
-const caveSafetyBuffer = 5;
-
 type BiomeType = "SNOW" | "GRASS" | "SEA";
 
 interface BiomeSeed {
@@ -81,6 +71,7 @@ function getFloodedBlocks(
   heightMap: Map<string, number>,
   size: number,
   seeds: BiomeSeed[],
+  p: TerrainParams,
 ): Set<string> {
   const flooded = new Set<string>();
   const queue: [number, number][] = [];
@@ -113,7 +104,7 @@ function getFloodedBlocks(
       const key = `${nx},${nz}`;
 
       if (nx >= 0 && nx < size && nz >= 0 && nz < size && !flooded.has(key)) {
-        if ((heightMap.get(key) ?? 999) < seaLevel) {
+        if ((heightMap.get(key) ?? 999) < p.seaParms.seaLevel) {
           flooded.add(key);
           queue.push([nx, nz]);
         }
@@ -131,6 +122,7 @@ function getBlockType(
   y: number,
   height: number,
   landFactor: number,
+  p: TerrainParams,
 ): BlockType {
   if (isFlooded && y >= height) return BlockType.WATER;
 
@@ -146,7 +138,7 @@ function getBlockType(
   const isCoastal = landFactor < 0.65;
 
   if (isCoastal || isShore) {
-    if (height <= beachHeightMax) {
+    if (height <= p.seaParms.seaLevel + 5) {
       return isSubSurface ? BlockType.SAND : BlockType.ROCK;
     } else {
       return BlockType.ROCK;
@@ -197,12 +189,11 @@ export function generateTopLeft(p: TerrainParams): BlockData[] {
   const heightMap = new Map<string, number>();
   const infoMap = new Map<string, { factor: number; biome: BiomeType }>();
 
-  // HEIGHT PASS
+  // Noise map for determining height
   for (let x = 0; x < size; x++) {
     for (let z = 0; z < size; z++) {
       const { landFactor, closestLandType } = getLandInfluence(x, z, seeds);
-
-      const base = lerp(seabedLevel, groundLevel, landFactor);
+      const base = lerp(p.seaParms.seabedLevel, p.groundLevel, landFactor);
       const noiseVal = getOctaveNoise(noise, x, z, octaves, freq, amp);
       const height = Math.floor(base + noiseVal);
 
@@ -212,50 +203,63 @@ export function generateTopLeft(p: TerrainParams): BlockData[] {
     }
   }
 
-  const flooded = getFloodedBlocks(heightMap, size, seeds);
+  const flooded = getFloodedBlocks(heightMap, size, seeds, p);
 
-  // shoreline
-  const shore = new Set<string>();
-  for (let x = 0; x < size; x++) {
-    for (let z = 0; z < size; z++) {
-      const key = `${x},${z}`;
-      if (flooded.has(key)) continue;
-
-      for (const [dx, dz] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ]) {
-        if (flooded.has(`${x + dx},${z + dz}`)) {
-          shore.add(key);
-          break;
-        }
-      }
-    }
-  }
-
-  // voxel pass
+  // Generate Blocks
   for (let x = 0; x < size; x++) {
     for (let z = 0; z < size; z++) {
       const key = `${x},${z}`;
       const height = heightMap.get(key)!;
       const { factor, biome } = infoMap.get(key)!;
-
       const isFlooded = flooded.has(key);
-      const isShore = shore.has(key);
 
-      const maxH = isFlooded ? Math.max(height, seaLevel) : height;
+      // Determine how deep to draw (sea level or terrain height)
+      const maxH = isFlooded ? Math.max(height, p.seaParms.seaLevel) : height;
 
       for (let y = 0; y < maxH; y++) {
         if (y >= worldHeight) break;
 
-        let type = getBlockType(biome, isFlooded, isShore, y, height, factor);
+        let type = getBlockType(biome, isFlooded, false, y, height, factor, p);
 
-        // caves
-        if (y < height - caveSafetyBuffer && type !== BlockType.WATER) {
-          const n = noise.simplex3(x * caveFreq, y * caveFreq, z * caveFreq);
-          if (n > caveThreshold) continue;
+        // CAVE LOGIC
+        // We only carve caves into non-water blocks below the safety buffer
+        if (
+          y < height - p.caveParams.caveSafetyBuffer &&
+          type !== BlockType.WATER
+        ) {
+          // 1. Cavern Noise (Blobs)
+          // Similar to Cheese caves in minecraft generation
+          const nBlob = noise.simplex3(
+            x * p.caveParams.caveFreq,
+            y * p.caveParams.caveFreq,
+            z * p.caveParams.caveFreq,
+          );
+
+          // 2. Tunnel Noise (Ridges)
+          // Similar to Spaghetti caves in minecraft generation
+          const nTunnel = Math.abs(
+            noise.simplex3(
+              x * p.caveParams.caveFreq + p.caveParams.tunnelOffset,
+              y * p.caveParams.caveFreq + p.caveParams.tunnelOffset,
+              z * p.caveParams.caveFreq + p.caveParams.tunnelOffset,
+            ),
+          );
+
+          const isCavern = nBlob < p.caveParams.caveThreshold;
+          const isTunnel = nTunnel < p.caveParams.tunnelWidth;
+
+          if (isCavern) {
+            continue;
+          }
+
+          if (isTunnel) {
+            //Randomly place some darker rock for variety
+            if (Math.random() < 0.1) {
+              type = BlockType.DARK_ROCK; // Add some mineral veins in tunnels
+            } else {
+              continue;
+            }
+          }
         }
 
         blocks.push({ x, y, z, type });

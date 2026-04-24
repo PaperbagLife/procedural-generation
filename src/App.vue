@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import VoxelWorld from "./components/VoxelWorld.vue";
 import { type TerrainParams } from "./types/terrain";
 
@@ -7,6 +7,11 @@ import { generateTopLeft } from "./gen_functions/yunkunlu";
 import { generateTopRight } from "./gen_functions/kaijielai";
 import { generateBottomLeft } from "./gen_functions/yuxincao";
 import { generateBottomRight } from "./gen_functions/yutaocao";
+
+const isTopLeftExpanded = ref(false);
+const toggleTopLeft = () => {
+  isTopLeftExpanded.value = !isTopLeftExpanded.value;
+};
 
 // --- State ---
 const params = reactive<TerrainParams>({
@@ -16,6 +21,17 @@ const params = reactive<TerrainParams>({
   worldSize: 100,
   worldHeight: 100,
   groundLevel: 70,
+  seaParms: {
+    seaLevel: 60,
+    seabedLevel: 40,
+  },
+  caveParams: {
+    caveThreshold: -0.1,
+    caveFreq: 0.08,
+    caveSafetyBuffer: 5,
+    tunnelOffset: 1000,
+    tunnelWidth: 0.1,
+  },
   seed: Date.now(),
 });
 
@@ -27,7 +43,12 @@ const regenerateSeed = () => {
 <template>
   <div class="app-container">
     <aside class="sidebar">
-      <h2>Generator</h2>
+      <div class="control-group">
+        <label>Seed ({{ params.seed }})</label>
+        <button class="regen-button" type="button" @click="regenerateSeed">
+          Generate
+        </button>
+      </div>
       <div class="control-group">
         <label>Frequency ({{ params.freq.toFixed(3) }})</label>
         <input type="range" v-model.number="params.freq" min="0.001" max="0.1" step="0.001" />
@@ -45,10 +66,51 @@ const regenerateSeed = () => {
         <input type="range" v-model.number="params.worldSize" min="20" max="120" step="5" />
       </div>
       <div class="control-group">
-        <label>Seed ({{ params.seed }})</label>
-        <button class="regen-button" type="button" @click="regenerateSeed">
-          Generate
-        </button>
+        <label>Ground Level ({{ params.groundLevel }})</label>
+        <input type="range" v-model.number="params.groundLevel" :min="10" :max="params.worldHeight - 10" step="1" />
+      </div>
+      <div class="foldable-container">
+        <div class="foldable-header" @click="toggleTopLeft">
+          <span>Top Left Controls</span>
+          <span class="arrow" :class="{ 'arrow-rotated': !isTopLeftExpanded }">▼</span>
+        </div>
+
+        <transition name="fold">
+          <div v-show="isTopLeftExpanded" class="foldable-content">
+            <div class="control-group">
+              <label>Sea Level ({{ params.seaParms.seaLevel }})</label>
+              <input type="range" v-model.number="params.seaParms.seaLevel" :min="10" :max="params.groundLevel"
+                step="1" />
+            </div>
+
+            <div class="control-group">
+              <label>Seabed Level ({{ params.seaParms.seabedLevel }})</label>
+              <input type="range" v-model.number="params.seaParms.seabedLevel" :min="5"
+                :max="params.seaParms.seaLevel - 5" step="1" />
+            </div>
+
+            <div class="control-group">
+              <label>Cave Threshold ({{ params.caveParams.caveThreshold.toFixed(2) }})</label>
+              <input type="range" v-model.number="params.caveParams.caveThreshold" min="-0.5" max="0.5" step="0.01" />
+            </div>
+
+            <div class="control-group">
+              <label>Cave Frequency ({{ params.caveParams.caveFreq.toFixed(3) }})</label>
+              <input type="range" v-model.number="params.caveParams.caveFreq" min="0.01" max="0.1" step="0.005" />
+            </div>
+
+            <div class="control-group">
+              <label>Cave Safety Buffer ({{ params.caveParams.caveSafetyBuffer }})</label>
+              <input type="range" v-model.number="params.caveParams.caveSafetyBuffer" min="0"
+                :max="params.worldHeight / 2" step="1" />
+            </div>
+
+            <div class="control-group">
+              <label>Tunnel Width ({{ (params.caveParams.tunnelWidth * 100).toFixed(1) }}%)</label>
+              <input type="range" v-model.number="params.caveParams.tunnelWidth" min="0.05" max="0.3" step="0.01" />
+            </div>
+          </div>
+        </transition>
       </div>
     </aside>
     <main class="viewport-grid">
@@ -106,6 +168,7 @@ body {
   flex-direction: column;
   gap: 15px;
   z-index: 10;
+  overflow-y: auto;
 }
 
 .viewport-grid {
@@ -142,5 +205,57 @@ body {
 
 input[type="range"] {
   width: 100%;
+}
+
+/* Foldable Header */
+.foldable-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: #2b2b2b;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 0.9rem;
+  margin-bottom: 5px;
+  border: 1px solid #333;
+}
+
+.foldable-header:hover {
+  background: #3a3a3a;
+}
+
+.arrow {
+  font-size: 0.7rem;
+  transition: transform 0.3s ease;
+}
+
+.arrow-rotated {
+  transform: rotate(-90deg);
+}
+
+.foldable-content {
+  padding: 10px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Transition Animation */
+.fold-enter-active,
+.fold-leave-active {
+  transition: all 0.3s ease-in-out;
+  max-height: 500px;
+  /* Adjust based on content size */
+  overflow: hidden;
+}
+
+.fold-enter-from,
+.fold-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 </style>

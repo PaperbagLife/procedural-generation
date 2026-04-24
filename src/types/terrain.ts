@@ -13,6 +13,19 @@ export const BlockType = {
 
 export type BlockType = (typeof BlockType)[keyof typeof BlockType];
 
+export type SeaParams = {
+  seaLevel: number;
+  seabedLevel: number;
+};
+
+export type CaveParams = {
+  caveThreshold: number; // -1 to 1 range, lower = less caves, higher = more caves
+  caveFreq: number; // Frequency of the noise used for caves
+  caveSafetyBuffer: number; // how many blocks under the surface starts to become caves
+  tunnelOffset: number; // Large offset to decorrelate from cavern noise
+  tunnelWidth: number; // Closer to 0 = thinner tunnels
+};
+
 export interface TerrainParams {
   freq: number;
   amp: number;
@@ -20,6 +33,8 @@ export interface TerrainParams {
   worldSize: number;
   worldHeight: number;
   groundLevel: number;
+  seaParms: SeaParams;
+  caveParams: CaveParams;
   seed: number;
 }
 
