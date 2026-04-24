@@ -178,6 +178,7 @@ const generate = () => {
     [BlockType.WOOD]: [],
     [BlockType.LEAVES]: [],
     [BlockType.SAND]: [],
+    [BlockType.DARK_ROCK]: [],
   };
 
   const blockList = props.genFunction(props.params);
