@@ -253,12 +253,7 @@ export function generateTopLeft(p: TerrainParams): BlockData[] {
           }
 
           if (isTunnel) {
-            //Randomly place some darker rock for variety
-            if (Math.random() < 0.1) {
-              type = BlockType.DARK_ROCK; // Add some mineral veins in tunnels
-            } else {
-              continue;
-            }
+            continue;
           }
         }
 
