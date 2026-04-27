@@ -9,6 +9,7 @@ export const BlockType = {
   LEAVES: 7,
   SAND: 8,
   DARK_ROCK: 9,
+  MAGMA: 10,
 } as const;
 
 export type BlockType = (typeof BlockType)[keyof typeof BlockType];
@@ -69,4 +70,5 @@ export const BLOCK_COLORS: Record<number, BlockMaterial> = {
   [BlockType.LEAVES]: { color: 0x2e6f2f },
   [BlockType.SAND]: { color: 0xe2d6a3 },
   [BlockType.DARK_ROCK]: { color: 0x555555 },
+  [BlockType.MAGMA]: { color: 0xff4d00 },
 };
