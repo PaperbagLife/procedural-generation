@@ -69,6 +69,13 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
   const warpNoise = createNoise2D((p.seed + 1717) >>> 0);
   const mineralNoise = createNoise2D((p.seed + 7331) >>> 0);
 
+  // Animate by drifting the sample window through noise space over time.
+  const t =
+    (typeof performance !== "undefined" ? performance.now() : Date.now()) *
+    0.001;
+  const flowX = t * 8.5;
+  const flowZ = t * 5.75;
+
   const freq = Math.max(0.001, p.freq);
   const minTop = 8;
   const maxTop = p.worldHeight - 4;
@@ -88,8 +95,8 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
   // Pass 1: generate floating-island columns.
   for (let x = 0; x < p.worldSize; x++) {
     for (let z = 0; z < p.worldSize; z++) {
-      const nx = x * freq;
-      const nz = z * freq;
+      const nx = (x + flowX) * freq;
+      const nz = (z + flowZ) * freq;
 
       const warpX = fbm2d(warpNoise, nx * 0.7 + 13.2, nz * 0.7 - 4.7, 2) * 2.8;
       const warpZ = fbm2d(warpNoise, nx * 0.7 - 7.1, nz * 0.7 + 9.9, 2) * 2.8;
@@ -129,8 +136,8 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
       const bottom = bottomMap[x][z];
       if (top < 0 || bottom < 0) continue;
 
-      const nx = x * freq;
-      const nz = z * freq;
+      const nx = (x + flowX) * freq;
+      const nz = (z + flowZ) * freq;
       const mineralBias = fbm2d(mineralNoise, nx * 1.7 + 90.1, nz * 1.7 - 61.4, 2);
 
       for (let y = bottom; y <= top; y++) {

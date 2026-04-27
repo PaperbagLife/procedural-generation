@@ -16,6 +16,7 @@ interface Props {
   title: string;
   syncEnabled: boolean;
   sharedTransform: CameraTransform;
+  autoRegenerateMs?: number;
 }
 
 const props = defineProps<Props>();
@@ -27,6 +28,7 @@ const container = ref<HTMLDivElement | null>(null);
 const isLocked = ref(false);
 
 let animationId: number | null = null;
+let regenerateTimerId: number | null = null;
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
@@ -148,11 +150,22 @@ const init = () => {
   generate();
   renderFrame();
 
+  if ((props.autoRegenerateMs ?? 0) > 0) {
+    regenerateTimerId = window.setInterval(() => {
+      generate();
+      renderFrame();
+    }, props.autoRegenerateMs);
+  }
+
   onUnmounted(() => {
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("resize", onWindowResize);
     if (animationId) cancelAnimationFrame(animationId);
+    if (regenerateTimerId !== null) {
+      window.clearInterval(regenerateTimerId);
+      regenerateTimerId = null;
+    }
     renderer.dispose();
   });
 };
