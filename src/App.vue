@@ -13,6 +13,11 @@ const toggleTopLeft = () => {
   isTopLeftExpanded.value = !isTopLeftExpanded.value;
 };
 
+const isDynamicMode = ref(false);
+const toggleRenderMode = () => {
+  isDynamicMode.value = !isDynamicMode.value;
+};
+
 // --- Terrain State ---
 const params = reactive<TerrainParams>({
   freq: 0.015,
@@ -62,6 +67,13 @@ const regenerateSeed = () => {
           <input type="checkbox" v-model="isSyncEnabled" />
           Sync Cameras
         </label>
+      </div>
+
+      <div class="control-group sync-panel">
+        <label>Render Mode: {{ isDynamicMode ? "Dynamic" : "Static" }}</label>
+        <button class="regen-button" type="button" @click="toggleRenderMode">
+          Switch To {{ isDynamicMode ? "Static" : "Dynamic" }}
+        </button>
       </div>
 
       <div class="control-group">
@@ -244,7 +256,7 @@ const regenerateSeed = () => {
         :genFunction="generateBottomRight"
         :sync-enabled="isSyncEnabled"
         :shared-transform="sharedTransform"
-        :auto-regenerate-ms="90"
+        :auto-regenerate-ms="isDynamicMode ? 90 : 0"
         @camera-update="onCameraUpdate"
       />
     </main>

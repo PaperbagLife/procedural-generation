@@ -46,6 +46,20 @@ let moveForward = false,
   moveUp = false,
   moveDown = false;
 
+const updateRegenerateTimer = () => {
+  if (regenerateTimerId !== null) {
+    window.clearInterval(regenerateTimerId);
+    regenerateTimerId = null;
+  }
+
+  if ((props.autoRegenerateMs ?? 0) > 0) {
+    regenerateTimerId = window.setInterval(() => {
+      generate();
+      renderFrame();
+    }, props.autoRegenerateMs);
+  }
+};
+
 const disposeInstancedMesh = (mesh: THREE.InstancedMesh) => {
   mesh.geometry.dispose();
   if (Array.isArray(mesh.material)) {
@@ -149,13 +163,7 @@ const init = () => {
 
   generate();
   renderFrame();
-
-  if ((props.autoRegenerateMs ?? 0) > 0) {
-    regenerateTimerId = window.setInterval(() => {
-      generate();
-      renderFrame();
-    }, props.autoRegenerateMs);
-  }
+  updateRegenerateTimer();
 
   onUnmounted(() => {
     window.removeEventListener("keydown", onKeyDown);
@@ -255,6 +263,13 @@ watch(
     renderFrame();
   },
   { deep: true },
+);
+
+watch(
+  () => props.autoRegenerateMs,
+  () => {
+    updateRegenerateTimer();
+  },
 );
 
 const animate = () => {
