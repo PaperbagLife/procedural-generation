@@ -214,7 +214,6 @@ const regenerateSeed = () => {
     </aside>
 
     <main class="viewport-grid">
-<<<<<<< Updated upstream
       <VoxelWorld
         title="TopLeft"
         :params="params"
@@ -247,16 +246,6 @@ const regenerateSeed = () => {
         :shared-transform="sharedTransform"
         @camera-update="onCameraUpdate"
       />
-=======
-      <VoxelWorld title="TopLeft" :params="params" :genFunction="generateTopLeft" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
-      <VoxelWorld title="TopRight" :params="params" :genFunction="generateTopRight" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
-      <VoxelWorld title="BottomLeft" :params="params" :genFunction="generateBottomLeft" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
-      <VoxelWorld title="BottomRight" :params="params" :genFunction="generateBottomRight" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" :auto-regenerate-ms="90" @camera-update="onCameraUpdate" />
->>>>>>> Stashed changes
     </main>
   </div>
 </template>
