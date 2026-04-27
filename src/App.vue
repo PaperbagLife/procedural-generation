@@ -244,6 +244,7 @@ const regenerateSeed = () => {
         :genFunction="generateBottomRight"
         :sync-enabled="isSyncEnabled"
         :shared-transform="sharedTransform"
+        :auto-regenerate-ms="90"
         @camera-update="onCameraUpdate"
       />
     </main>

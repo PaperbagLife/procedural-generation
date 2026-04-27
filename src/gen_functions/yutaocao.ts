@@ -4,49 +4,26 @@ import {
   type BlockData,
 } from "../types/terrain";
 
-type Noise2D = (x: number, z: number) => number;
+import NoiseModule from "noisejs";
+
+const Noise = (NoiseModule as any).Noise;
+
+type PerlinNoise = {
+  perlin2(x: number, z: number): number;
+  perlin3(x: number, y: number, z: number): number;
+};
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-const smoothstep = (t: number) => t * t * (3 - 2 * t);
-
-function hash2d01(seed: number, x: number, z: number): number {
-  let h = (seed ^ (x * 374761393) ^ (z * 668265263)) >>> 0;
-  h = (h ^ (h >>> 13)) >>> 0;
-  h = Math.imul(h, 1274126177) >>> 0;
-  h = (h ^ (h >>> 16)) >>> 0;
-  return h / 0xffffffff;
-}
-
-function createNoise2D(seed: number): Noise2D {
-  return (x: number, z: number) => {
-    const x0 = Math.floor(x);
-    const z0 = Math.floor(z);
-    const x1 = x0 + 1;
-    const z1 = z0 + 1;
-
-    const sx = smoothstep(x - x0);
-    const sz = smoothstep(z - z0);
-
-    const n00 = hash2d01(seed, x0, z0);
-    const n10 = hash2d01(seed, x1, z0);
-    const n01 = hash2d01(seed, x0, z1);
-    const n11 = hash2d01(seed, x1, z1);
-
-    const ix0 = lerp(n00, n10, sx);
-    const ix1 = lerp(n01, n11, sx);
-    return lerp(ix0, ix1, sz) * 2 - 1;
-  };
-}
+const to01 = (value: number) => clamp(value * 0.5 + 0.5, 0, 1);
 
 function fbm2d(
-  noise: Noise2D,
+  noise: PerlinNoise,
   x: number,
   z: number,
   octaves: number,
+  persistence = 0.5,
 ): number {
   let total = 0;
   let amplitude = 1;
@@ -54,123 +31,201 @@ function fbm2d(
   let norm = 0;
 
   for (let i = 0; i < octaves; i++) {
-    total += noise(x * frequency, z * frequency) * amplitude;
+    total += noise.perlin2(x * frequency, z * frequency) * amplitude;
     norm += amplitude;
-    amplitude *= 0.5;
+    amplitude *= persistence;
     frequency *= 2;
   }
 
   return norm === 0 ? 0 : total / norm;
 }
 
-export function generateBottomRight(p: TerrainParams): BlockData[] {
-  const blocks: BlockData[] = [];
-  const noise = createNoise2D((p.seed + 9001) >>> 0);
-  const warpNoise = createNoise2D((p.seed + 1717) >>> 0);
-  const mineralNoise = createNoise2D((p.seed + 7331) >>> 0);
+function fbm3d(
+  noise: PerlinNoise,
+  x: number,
+  y: number,
+  z: number,
+  octaves: number,
+  persistence = 0.5,
+): number {
+  let total = 0;
+  let amplitude = 1;
+  let frequency = 1;
+  let norm = 0;
 
-  // Animate by drifting the sample window through noise space over time.
-  const t =
-    (typeof performance !== "undefined" ? performance.now() : Date.now()) *
-    0.001;
-  const flowX = t * 8.5;
-  const flowZ = t * 5.75;
-
-  const freq = Math.max(0.001, p.freq);
-  const minTop = 8;
-  const maxTop = p.worldHeight - 4;
-  const baseAltitude = clamp(
-    p.groundLevel + Math.floor(p.amp * 0.45),
-    12,
-    p.worldHeight - 16,
-  );
-
-  const topMap = Array.from({ length: p.worldSize }, () =>
-    Array(p.worldSize).fill(-1),
-  );
-  const bottomMap = Array.from({ length: p.worldSize }, () =>
-    Array(p.worldSize).fill(-1),
-  );
-
-  // Pass 1: generate floating-island columns.
-  for (let x = 0; x < p.worldSize; x++) {
-    for (let z = 0; z < p.worldSize; z++) {
-      const nx = (x + flowX) * freq;
-      const nz = (z + flowZ) * freq;
-
-      const warpX = fbm2d(warpNoise, nx * 0.7 + 13.2, nz * 0.7 - 4.7, 2) * 2.8;
-      const warpZ = fbm2d(warpNoise, nx * 0.7 - 7.1, nz * 0.7 + 9.9, 2) * 2.8;
-
-      const massA = fbm2d(noise, nx * 0.34 + warpX, nz * 0.34 + warpZ, p.octaves + 1);
-      const massB = fbm2d(noise, nx * 1.4 + 17.1, nz * 1.4 - 28.4, 3);
-      const density = massA * 0.8 + massB * 0.2;
-
-      if (density < 0.24) continue;
-
-      const islandLift = Math.pow((density - 0.24) / 0.76, 1.15);
-      const topNoise = fbm2d(noise, nx * 0.95 - 33.7, nz * 0.95 + 8.6, 3);
-      const thicknessNoise = fbm2d(noise, nx * 1.2 + 44.8, nz * 1.2 - 52.3, 2);
-
-      const top = clamp(
-        Math.floor(baseAltitude + islandLift * p.amp * 1.1 + topNoise * p.amp * 0.2),
-        minTop,
-        maxTop,
-      );
-
-      const thickness = clamp(
-        Math.floor(4 + islandLift * 8 + (thicknessNoise + 1) * 2.5),
-        4,
-        15,
-      );
-
-      const bottom = clamp(top - thickness, 2, top - 3);
-      topMap[x][z] = top;
-      bottomMap[x][z] = bottom;
-    }
+  for (let i = 0; i < octaves; i++) {
+    total += noise.perlin3(x * frequency, y * frequency, z * frequency) * amplitude;
+    norm += amplitude;
+    amplitude *= persistence;
+    frequency *= 2;
   }
 
-  // Pass 2: fill materials. Uses SAND as a mineral proxy since we cannot add new block types here.
-  for (let x = 0; x < p.worldSize; x++) {
-    for (let z = 0; z < p.worldSize; z++) {
-      const top = topMap[x][z];
-      const bottom = bottomMap[x][z];
-      if (top < 0 || bottom < 0) continue;
+  return norm === 0 ? 0 : total / norm;
+}
 
-      const nx = (x + flowX) * freq;
-      const nz = (z + flowZ) * freq;
-      const mineralBias = fbm2d(mineralNoise, nx * 1.7 + 90.1, nz * 1.7 - 61.4, 2);
+interface Vent {
+  x: number;
+  z: number;
+  baseY: number;
+  topY: number;
+  radius: number;
+  speed: number;
+  phase: number;
+}
 
-      for (let y = bottom; y <= top; y++) {
-        const depth = top - y;
-        let type: BlockType;
+const addBlock = (
+  blocks: BlockData[],
+  occupied: Set<string>,
+  x: number,
+  y: number,
+  z: number,
+  type: BlockType,
+) => {
+  const key = `${x},${y},${z}`;
+  if (occupied.has(key)) return;
+  occupied.add(key);
+  blocks.push({ x, y, z, type });
+};
 
-        if (depth === 0) {
-          type = BlockType.GRASS;
-        } else if (depth <= 2) {
-          type = BlockType.DIRT;
-        } else {
-          const oreNoise = fbm2d(mineralNoise, nx * 2.2 + y * 0.19, nz * 2.2 - y * 0.23, 3);
-          const oreThreshold = 0.74 - Math.max(0, mineralBias) * 0.1;
-          type = oreNoise > oreThreshold ? BlockType.SAND : BlockType.ROCK;
+function createVents(p: TerrainParams, layoutNoise: PerlinNoise): Vent[] {
+  const ventSeeds = [0.18, 0.51, 0.79];
+  return ventSeeds.map((seed, index) => {
+    const xBias = fbm2d(layoutNoise, seed * 8.7 + 13.1, p.seed * 0.0001 + index, 2);
+    const zBias = fbm2d(layoutNoise, seed * 7.1 - 3.4, p.seed * 0.0001 - index, 2);
+    const heightBias = fbm2d(layoutNoise, seed * 5.2 + 21.8, p.seed * 0.0001 + index * 2, 2);
+    const radiusBias = fbm2d(layoutNoise, seed * 4.6 - 12.9, p.seed * 0.0001 + index * 3, 2);
+    const speedBias = fbm2d(layoutNoise, seed * 6.2 + 7.7, p.seed * 0.0001 - index * 4, 2);
+
+    const x = clamp(
+      Math.round(p.worldSize * (0.16 + seed * 0.64 + xBias * 0.08)),
+      0,
+      p.worldSize - 1,
+    );
+    const z = clamp(
+      Math.round(p.worldSize * (0.18 + (1 - seed) * 0.58 + zBias * 0.08)),
+      0,
+      p.worldSize - 1,
+    );
+
+    const topY = clamp(
+      Math.round(p.worldHeight * (0.58 + index * 0.09 + heightBias * 0.08)),
+      10,
+      p.worldHeight - 3,
+    );
+    const baseY = clamp(
+      Math.round(topY - (12 + p.amp * 0.3 + index * 4)),
+      2,
+      topY - 4,
+    );
+
+    return {
+      x,
+      z,
+      baseY,
+      topY,
+      radius: clamp(Math.round(3 + p.amp * 0.08 + radiusBias * 3), 3, 8),
+      speed: 0.9 + to01(speedBias) * 1.8,
+      phase: index * 13.7 + seed * 17.0,
+    };
+  });
+}
+
+export function generateBottomRight(p: TerrainParams): BlockData[] {
+  const blocks: BlockData[] = [];
+  const layoutNoise = new Noise((p.seed + 9001) >>> 0) as PerlinNoise;
+  const turbulenceNoise = new Noise((p.seed + 1717) >>> 0) as PerlinNoise;
+  const coreNoise = new Noise((p.seed + 7331) >>> 0) as PerlinNoise;
+
+  const vents = createVents(p, layoutNoise);
+  const occupied = new Set<string>();
+  const t = (typeof performance !== "undefined" ? performance.now() : Date.now()) * 0.001;
+  const riseSpeed = 18 + p.amp * 0.9;
+  const verticalScale = Math.max(0.06, p.freq * 1.6);
+  const horizontalScale = Math.max(0.05, p.freq * 1.1);
+
+  for (const vent of vents) {
+    const minX = Math.max(0, vent.x - vent.radius - 2);
+    const maxX = Math.min(p.worldSize - 1, vent.x + vent.radius + 2);
+    const minZ = Math.max(0, vent.z - vent.radius - 2);
+    const maxZ = Math.min(p.worldSize - 1, vent.z + vent.radius + 2);
+    const plumeHeight = Math.max(vent.topY - vent.baseY, 1);
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        const dx = (x - vent.x) / vent.radius;
+        const dz = (z - vent.z) / vent.radius;
+        const radial = Math.sqrt(dx * dx + dz * dz);
+        if (radial > 1.0) continue;
+
+        const cylinderMask = Math.pow(1 - radial, 1.35);
+        const shellBias = radial > 0.72 ? 1 : 0;
+
+        for (let y = vent.baseY; y <= vent.topY; y++) {
+          const rise = y - vent.baseY;
+          const movingY = y - riseSpeed * t + vent.phase;
+          const movingBand = clamp(
+            1 - Math.abs((rise - (riseSpeed * t + vent.phase) * 0.2) / plumeHeight),
+            0,
+            1,
+          );
+          const turbulence = fbm3d(
+            turbulenceNoise,
+            (x - vent.x) * horizontalScale,
+            movingY * verticalScale,
+            (z - vent.z) * horizontalScale,
+            4,
+            0.55,
+          );
+          const corePulse = fbm3d(
+            coreNoise,
+            (x - vent.x) * 0.21 + vent.phase,
+            movingY * 0.12,
+            (z - vent.z) * 0.21 - vent.phase,
+            3,
+            0.58,
+          );
+          const heightFalloff = 1 - rise / plumeHeight;
+          const upwardPull = clamp(movingBand * 1.2 + heightFalloff * 0.4, 0, 1.4);
+          const density =
+            cylinderMask * 0.58 +
+            upwardPull * 0.28 +
+            to01(turbulence) * 0.34 +
+            to01(corePulse) * 0.2;
+          const threshold = 0.28 - cylinderMask * 0.12 - upwardPull * 0.08;
+
+          if (density < threshold) continue;
+
+          let type: BlockType = BlockType.SAND;
+          if (rise < 2) {
+            type = BlockType.DARK_ROCK;
+          } else if (shellBias && density < 0.72) {
+            type = BlockType.ROCK;
+          } else if (density < 0.5) {
+            type = BlockType.DARK_ROCK;
+          }
+
+          addBlock(blocks, occupied, x, y, z, type);
         }
 
-        blocks.push({ x, y, z, type });
-      }
+        const sprayHeight = clamp(Math.floor(vent.radius * 0.9), 2, 8);
+        for (let y = vent.topY + 1; y <= vent.topY + sprayHeight; y++) {
+          if (y >= p.worldHeight) break;
 
-      const spikeNoise = fbm2d(noise, nx * 2.3 + 8.8, nz * 2.3 - 15.6, 2);
-      if (spikeNoise > 0.7) {
-        const len = clamp(Math.floor((spikeNoise - 0.7) * 16), 2, 7);
-        for (let i = 1; i <= len; i++) {
-          const y = bottom - i;
-          if (y < 1) break;
+          const movingY = y - riseSpeed * t + vent.phase;
+          const sprayNoise = fbm3d(
+            turbulenceNoise,
+            (x - vent.x) * horizontalScale * 1.15,
+            movingY * verticalScale * 1.2,
+            (z - vent.z) * horizontalScale * 1.15,
+            3,
+            0.55,
+          );
+          const sprayDensity =
+            cylinderMask * 0.34 + to01(sprayNoise) * 0.62 - (y - vent.topY) * 0.09;
 
-          const crystalNoise = fbm2d(mineralNoise, nx * 2.8 + y * 0.11, nz * 2.8 + y * 0.13, 2);
-          blocks.push({
-            x,
-            y,
-            z,
-            type: crystalNoise > 0.83 ? BlockType.SAND : BlockType.ROCK,
-          });
+          if (sprayDensity > 0.45) {
+            addBlock(blocks, occupied, x, y, z, BlockType.SAND);
+          }
         }
       }
     }
