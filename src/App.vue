@@ -13,7 +13,6 @@ const toggleTopLeft = () => {
   isTopLeftExpanded.value = !isTopLeftExpanded.value;
 };
 
-
 // --- Terrain State ---
 const params = reactive<TerrainParams>({
   freq: 0.015,
@@ -27,11 +26,11 @@ const params = reactive<TerrainParams>({
     seabedLevel: 40,
   },
   caveParams: {
-    caveThreshold: -0.1,
-    caveFreq: 0.08,
+    caveThreshold: -0.3,
+    caveFreq: 0.03,
     caveSafetyBuffer: 5,
     tunnelOffset: 1000,
-    tunnelWidth: 0.1,
+    tunnelWidth: 0.05,
   },
   seed: Date.now(),
 });
@@ -49,7 +48,6 @@ const onCameraUpdate = (payload: CameraTransform) => {
     console.log("Camera updated:", payload);
   }
 };
-
 
 const regenerateSeed = () => {
   params.seed = Date.now();
@@ -75,59 +73,140 @@ const regenerateSeed = () => {
 
       <div class="control-group">
         <label>Frequency ({{ params.freq.toFixed(3) }})</label>
-        <input type="range" v-model.number="params.freq" min="0.001" max="0.1" step="0.001" />
+        <input
+          type="range"
+          v-model.number="params.freq"
+          min="0.001"
+          max="0.1"
+          step="0.001"
+        />
       </div>
       <div class="control-group">
         <label>Amplitude ({{ params.amp }})</label>
-        <input type="range" v-model.number="params.amp" min="1" max="50" step="1" />
+        <input
+          type="range"
+          v-model.number="params.amp"
+          min="1"
+          max="50"
+          step="1"
+        />
       </div>
       <div class="control-group">
         <label>Octaves ({{ params.octaves }})</label>
-        <input type="range" v-model.number="params.octaves" min="1" max="6" step="1" />
+        <input
+          type="range"
+          v-model.number="params.octaves"
+          min="1"
+          max="6"
+          step="1"
+        />
       </div>
       <div class="control-group">
         <label>World Size ({{ params.worldSize }})</label>
-        <input type="range" v-model.number="params.worldSize" min="20" max="120" step="5" />
+        <input
+          type="range"
+          v-model.number="params.worldSize"
+          min="20"
+          max="120"
+          step="5"
+        />
       </div>
       <div class="control-group">
         <label>Ground Level ({{ params.groundLevel }})</label>
-        <input type="range" v-model.number="params.groundLevel" :min="10" :max="params.worldHeight - 10" step="1" />
+        <input
+          type="range"
+          v-model.number="params.groundLevel"
+          :min="10"
+          :max="params.worldHeight - 10"
+          step="1"
+        />
       </div>
 
       <div class="foldable-container">
         <div class="foldable-header" @click="toggleTopLeft">
           <span>Controls for top left viewport</span>
-          <span class="arrow" :class="{ 'arrow-rotated': !isTopLeftExpanded }">▼</span>
+          <span class="arrow" :class="{ 'arrow-rotated': !isTopLeftExpanded }"
+            >▼</span
+          >
         </div>
 
         <transition name="fold">
           <div v-show="isTopLeftExpanded" class="foldable-content">
             <div class="control-group">
               <label>Sea Level ({{ params.seaParms.seaLevel }})</label>
-              <input type="range" v-model.number="params.seaParms.seaLevel" :min="10" :max="params.groundLevel"
-                step="1" />
+              <input
+                type="range"
+                v-model.number="params.seaParms.seaLevel"
+                :min="10"
+                :max="params.groundLevel"
+                step="1"
+              />
             </div>
             <div class="control-group">
               <label>Seabed Level ({{ params.seaParms.seabedLevel }})</label>
-              <input type="range" v-model.number="params.seaParms.seabedLevel" :min="5"
-                :max="params.seaParms.seaLevel - 5" step="1" />
+              <input
+                type="range"
+                v-model.number="params.seaParms.seabedLevel"
+                :min="5"
+                :max="params.seaParms.seaLevel - 5"
+                step="1"
+              />
             </div>
             <div class="control-group">
-              <label>Cave Threshold ({{ params.caveParams.caveThreshold.toFixed(2) }})</label>
-              <input type="range" v-model.number="params.caveParams.caveThreshold" min="-0.5" max="0.5" step="0.01" />
+              <label
+                >Cave Threshold ({{
+                  params.caveParams.caveThreshold.toFixed(2)
+                }})</label
+              >
+              <input
+                type="range"
+                v-model.number="params.caveParams.caveThreshold"
+                min="-1"
+                max="0.5"
+                step="0.01"
+              />
             </div>
             <div class="control-group">
-              <label>Cave Frequency ({{ params.caveParams.caveFreq.toFixed(3) }})</label>
-              <input type="range" v-model.number="params.caveParams.caveFreq" min="0.01" max="0.1" step="0.005" />
+              <label
+                >Cave Frequency ({{
+                  params.caveParams.caveFreq.toFixed(3)
+                }})</label
+              >
+              <input
+                type="range"
+                v-model.number="params.caveParams.caveFreq"
+                min="0.01"
+                max="0.1"
+                step="0.005"
+              />
             </div>
             <div class="control-group">
-              <label>Cave Safety Buffer ({{ params.caveParams.caveSafetyBuffer }})</label>
-              <input type="range" v-model.number="params.caveParams.caveSafetyBuffer" min="0"
-                :max="params.worldHeight / 2" step="1" />
+              <label
+                >Cave Safety Buffer ({{
+                  params.caveParams.caveSafetyBuffer
+                }})</label
+              >
+              <input
+                type="range"
+                v-model.number="params.caveParams.caveSafetyBuffer"
+                min="0"
+                :max="params.worldHeight / 2"
+                step="1"
+              />
             </div>
             <div class="control-group">
-              <label>Tunnel Width ({{ (params.caveParams.tunnelWidth * 100).toFixed(1) }}%)</label>
-              <input type="range" v-model.number="params.caveParams.tunnelWidth" min="0.05" max="0.3" step="0.01" />
+              <label
+                >Tunnel Width ({{
+                  (params.caveParams.tunnelWidth * 100).toFixed(1)
+                }}%)</label
+              >
+              <input
+                type="range"
+                v-model.number="params.caveParams.tunnelWidth"
+                min="0.05"
+                max="0.3"
+                step="0.01"
+              />
             </div>
           </div>
         </transition>
@@ -135,14 +214,38 @@ const regenerateSeed = () => {
     </aside>
 
     <main class="viewport-grid">
-      <VoxelWorld title="TopLeft" :params="params" :genFunction="generateTopLeft" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
-      <VoxelWorld title="TopRight" :params="params" :genFunction="generateTopRight" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
-      <VoxelWorld title="BottomLeft" :params="params" :genFunction="generateBottomLeft" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
-      <VoxelWorld title="BottomRight" :params="params" :genFunction="generateBottomRight" :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform" @camera-update="onCameraUpdate" />
+      <VoxelWorld
+        title="TopLeft"
+        :params="params"
+        :genFunction="generateTopLeft"
+        :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform"
+        @camera-update="onCameraUpdate"
+      />
+      <VoxelWorld
+        title="TopRight"
+        :params="params"
+        :genFunction="generateTopRight"
+        :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform"
+        @camera-update="onCameraUpdate"
+      />
+      <VoxelWorld
+        title="BottomLeft"
+        :params="params"
+        :genFunction="generateBottomLeft"
+        :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform"
+        @camera-update="onCameraUpdate"
+      />
+      <VoxelWorld
+        title="BottomRight"
+        :params="params"
+        :genFunction="generateBottomRight"
+        :sync-enabled="isSyncEnabled"
+        :shared-transform="sharedTransform"
+        @camera-update="onCameraUpdate"
+      />
     </main>
   </div>
 </template>
@@ -159,7 +262,7 @@ const regenerateSeed = () => {
   height: 100%;
 }
 
-.viewport-grid>* {
+.viewport-grid > * {
   width: 100%;
   height: 100%;
   overflow: hidden;

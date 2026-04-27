@@ -20,7 +20,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
-  (e: 'camera-update', payload: CameraTransform): void
+  (e: "camera-update", payload: CameraTransform): void;
 }>();
 
 const container = ref<HTMLDivElement | null>(null);
@@ -37,7 +37,12 @@ const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const clock = new THREE.Timer();
 
-let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, moveUp = false, moveDown = false;
+let moveForward = false,
+  moveBackward = false,
+  moveLeft = false,
+  moveRight = false,
+  moveUp = false,
+  moveDown = false;
 
 const disposeInstancedMesh = (mesh: THREE.InstancedMesh) => {
   mesh.geometry.dispose();
@@ -90,23 +95,49 @@ const init = () => {
   const onKeyDown = (e: KeyboardEvent) => {
     if (!controls.isLocked) return;
     switch (e.code) {
-      case "KeyW": moveForward = true; break;
-      case "KeyA": moveLeft = true; break;
-      case "KeyS": moveBackward = true; break;
-      case "KeyD": moveRight = true; break;
-      case "Space": moveUp = true; e.preventDefault(); break;
-      case "ShiftLeft": moveDown = true; e.preventDefault(); break;
+      case "KeyW":
+        moveForward = true;
+        break;
+      case "KeyA":
+        moveLeft = true;
+        break;
+      case "KeyS":
+        moveBackward = true;
+        break;
+      case "KeyD":
+        moveRight = true;
+        break;
+      case "Space":
+        moveUp = true;
+        e.preventDefault();
+        break;
+      case "ShiftLeft":
+        moveDown = true;
+        e.preventDefault();
+        break;
     }
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
     switch (e.code) {
-      case "KeyW": moveForward = false; break;
-      case "KeyA": moveLeft = false; break;
-      case "KeyS": moveBackward = false; break;
-      case "KeyD": moveRight = false; break;
-      case "Space": moveUp = false; break;
-      case "ShiftLeft": moveDown = false; break;
+      case "KeyW":
+        moveForward = false;
+        break;
+      case "KeyA":
+        moveLeft = false;
+        break;
+      case "KeyS":
+        moveBackward = false;
+        break;
+      case "KeyD":
+        moveRight = false;
+        break;
+      case "Space":
+        moveUp = false;
+        break;
+      case "ShiftLeft":
+        moveDown = false;
+        break;
     }
   };
 
@@ -144,16 +175,26 @@ const generate = () => {
   instancedMeshes = [];
 
   const instancedData: Record<number, THREE.Matrix4[]> = {
-    [BlockType.GRASS]: [], [BlockType.SNOW]: [], [BlockType.ROCK]: [],
-    [BlockType.WATER]: [], [BlockType.DIRT]: [], [BlockType.WOOD]: [],
-    [BlockType.LEAVES]: [], [BlockType.SAND]: [], [BlockType.DARK_ROCK]: [],
+    [BlockType.GRASS]: [],
+    [BlockType.SNOW]: [],
+    [BlockType.ROCK]: [],
+    [BlockType.WATER]: [],
+    [BlockType.DIRT]: [],
+    [BlockType.WOOD]: [],
+    [BlockType.LEAVES]: [],
+    [BlockType.SAND]: [],
+    [BlockType.DARK_ROCK]: [],
   };
 
   const blockList = props.genFunction(props.params);
 
   blockList.forEach((block) => {
     if (block.type !== BlockType.NULL && instancedData[block.type]) {
-      const matrix = new THREE.Matrix4().makeTranslation(block.x, block.y, block.z);
+      const matrix = new THREE.Matrix4().makeTranslation(
+        block.x,
+        block.y,
+        block.z,
+      );
       instancedData[block.type].push(matrix);
     }
   });
@@ -178,18 +219,26 @@ const renderFrame = () => {
 };
 
 // Sync incoming changes from other cameras
-watch(() => props.sharedTransform, (newVal) => {
-  if (props.syncEnabled && !isLocked.value) {
-    camera.position.fromArray(newVal.position);
-    camera.quaternion.fromArray(newVal.quaternion);
-    renderFrame();
-  }
-}, { deep: true });
+watch(
+  () => props.sharedTransform,
+  (newVal) => {
+    if (props.syncEnabled && !isLocked.value) {
+      camera.position.fromArray(newVal.position);
+      camera.quaternion.fromArray(newVal.quaternion);
+      renderFrame();
+    }
+  },
+  { deep: true },
+);
 
-watch(() => props.params, () => {
-  generate();
-  renderFrame();
-}, { deep: true });
+watch(
+  () => props.params,
+  () => {
+    generate();
+    renderFrame();
+  },
+  { deep: true },
+);
 
 const animate = () => {
   if (!isLocked.value) {
@@ -221,9 +270,14 @@ const animate = () => {
 
   // Sync outgoing changes if we are the leader
   if (props.syncEnabled) {
-    emit('camera-update', {
+    emit("camera-update", {
       position: camera.position.toArray() as [number, number, number],
-      quaternion: camera.quaternion.toArray() as [number, number, number, number]
+      quaternion: camera.quaternion.toArray() as [
+        number,
+        number,
+        number,
+        number,
+      ],
     });
   }
 
