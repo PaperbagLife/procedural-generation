@@ -209,6 +209,13 @@ const generate = () => {
     [BlockType.SCULK]: [],
     [BlockType.MYCELIUM]: [],
     [BlockType.NETHERRACK]: [],
+    [BlockType.TUNDRA_SURFACE]: [],
+    [BlockType.TAIGA_SURFACE]: [],
+    [BlockType.STEPPE_SURFACE]: [],
+    [BlockType.FOREST_SURFACE]: [],
+    [BlockType.TEMPERATE_FOREST_SURFACE]: [],
+    [BlockType.GRASSLAND_SURFACE]: [],
+    [BlockType.TROPICAL_FOREST_SURFACE]: [],
   };
 
   const blockList = props.genFunction(props.params);

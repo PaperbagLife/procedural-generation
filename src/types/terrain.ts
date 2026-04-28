@@ -13,6 +13,15 @@ export const BlockType = {
   SCULK: 11,
   MYCELIUM: 12,
   NETHERRACK: 13,
+
+  // --- yuxincao BottomLeft：LUT 生物群系专用地表（接在既有类型后）---
+  TUNDRA_SURFACE: 14,
+  TAIGA_SURFACE: 15,
+  STEPPE_SURFACE: 16,
+  FOREST_SURFACE: 17,
+  TEMPERATE_FOREST_SURFACE: 18,
+  GRASSLAND_SURFACE: 19,
+  TROPICAL_FOREST_SURFACE: 20,
 } as const;
 
 export type BlockType = (typeof BlockType)[keyof typeof BlockType];
@@ -77,4 +86,12 @@ export const BLOCK_COLORS: Record<number, BlockMaterial> = {
   [BlockType.SCULK]: { color: 0x0f4c5c },
   [BlockType.MYCELIUM]: { color: 0x8e4f9f },
   [BlockType.NETHERRACK]: { color: 0x7a1e1e },
+
+  [BlockType.TUNDRA_SURFACE]: { color: 0xc8d6cc },
+  [BlockType.TAIGA_SURFACE]: { color: 0x3a4d3c },
+  [BlockType.STEPPE_SURFACE]: { color: 0xc4a574 },
+  [BlockType.FOREST_SURFACE]: { color: 0x2f6b38 },
+  [BlockType.TEMPERATE_FOREST_SURFACE]: { color: 0x4a8c52 },
+  [BlockType.GRASSLAND_SURFACE]: { color: 0x5cb85c },
+  [BlockType.TROPICAL_FOREST_SURFACE]: { color: 0x3d9a5b },
 };

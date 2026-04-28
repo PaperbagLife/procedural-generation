@@ -10,7 +10,7 @@ const Noise = (NoiseModule as any).Noise;
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
 
-/** get the latitude */
+/** get the 2D fractional Brownian motion */
 function fbm2d(
   noise: InstanceType<typeof Noise>,
   x: number,
@@ -35,13 +35,14 @@ function to01(n: number): number {
   return clamp((n + 1) * 0.5, 0, 1);
 }
 
-
+/** biome lookup table */
 const BIOME_LUT: string[][] = [
   ["Tundra", "Taiga", "Snow"],
   ["Steppe", "Forest", "TemperateForest"],
   ["Desert", "Grassland", "TropicalForest"],
 ];
 
+/** biome name */
 type BiomeName =
   | "Ocean"
   | "SnowMountain"
@@ -52,6 +53,8 @@ function lutIndex(v: number): number {
   return Math.min(2, Math.floor(v * 3 - 1e-9));
 }
 
+// Input: height, moisture, temperature
+// Output: biome name
 function classifyBiome(
   h: number,
   m: number,
@@ -70,11 +73,22 @@ function surfaceBlock(biome: BiomeName): BlockType {
     case "Ocean":
       return BlockType.SAND;
     case "Desert":
-    case "Steppe":
       return BlockType.SAND;
-    case "Snow":
+    case "Steppe":
+      return BlockType.STEPPE_SURFACE;
     case "Tundra":
+      return BlockType.TUNDRA_SURFACE;
     case "Taiga":
+      return BlockType.TAIGA_SURFACE;
+    case "Forest":
+      return BlockType.FOREST_SURFACE;
+    case "TemperateForest":
+      return BlockType.TEMPERATE_FOREST_SURFACE;
+    case "Grassland":
+      return BlockType.GRASSLAND_SURFACE;
+    case "TropicalForest":
+      return BlockType.TROPICAL_FOREST_SURFACE;
+    case "Snow":
     case "SnowMountain":
       return BlockType.SNOW;
     case "RockyMountain":
@@ -86,8 +100,11 @@ function surfaceBlock(biome: BiomeName): BlockType {
 
 function subsurfaceBlock(biome: BiomeName, y: number, top: number): BlockType {
   if (y >= top - 2) return BlockType.DIRT;
-  if (biome === "Desert" || biome === "Steppe") {
+  if (biome === "Desert") {
     return y > top * 0.3 ? BlockType.SAND : BlockType.ROCK;
+  }
+  if (biome === "Steppe") {
+    return y > top * 0.3 ? BlockType.STEPPE_SURFACE : BlockType.ROCK;
   }
   return BlockType.ROCK;
 }
@@ -95,36 +112,43 @@ function subsurfaceBlock(biome: BiomeName, y: number, top: number): BlockType {
 export function generateBottomLeft(p: TerrainParams): BlockData[] {
   const blocks: BlockData[] = [];
   const noise = new Noise(p.seed + 4242);
-
+  
+  // basic parameters
   const seaLevel = 0.4;
   const mountainLevel = 0.75;
   const alpha = 0.5;
   const beta = 0.5;
 
-  const frequencyH = Math.max(0.002, p.freq);
-  const frequencyM = frequencyH * 0.45;
-  const offsetM = 133.7;
+  const frequencyH = Math.max(0.002, p.freq); // height frequency
+  const frequencyM = frequencyH * 0.45; // moisture frequency
+  const offsetM = 133.7; // moisture offset
 
+  // 地形高度换算
   const minY = 1;
   const maxY = Math.max(minY + 2, p.worldHeight - 2);
   const rangeY = maxY - minY;
-  const seaSurfaceY = minY + Math.floor(seaLevel * rangeY);
+  const seaSurfaceY = minY + Math.floor(seaLevel * rangeY); // calculate the y value of the sea surface
 
+  // Two loops iterating x and z coordinates.(ground generation)
   for (let x = 0; x < p.worldSize; x++) {
     for (let z = 0; z < p.worldSize; z++) {
+      // 1. Calculate the height and moisture noise values
       const nx = x * frequencyH;
       const nz = z * frequencyH;
-      const hNorm = to01(fbm2d(noise, nx, nz, p.octaves));
+      const hNorm = to01(fbm2d(noise, nx, nz, p.octaves));  // y
 
       const mx = x * frequencyM + offsetM;
       const mz = z * frequencyM + offsetM;
       const mNorm = to01(fbm2d(noise, mx, mz, p.octaves));
 
+      // 2. Calculate the temperature and latitude
       const latitude = z / Math.max(1, p.worldSize);
       const t = clamp(1 - (alpha * latitude + beta * hNorm), 0, 1);
-
+      
+      // 3. Classify the biome
       const biome = classifyBiome(hNorm, mNorm, t, seaLevel, mountainLevel);
 
+      // 4. Calculate the terrain top(the highest block of the terrain)
       let terrainTop: number;
       if (biome === "Ocean") {
         const seabed = Math.max(
@@ -138,8 +162,8 @@ export function generateBottomLeft(p: TerrainParams): BlockData[] {
 
       terrainTop = clamp(terrainTop, minY, maxY);
 
+      // 5. Stack blocks up to the terrain top
       const topBlock = surfaceBlock(biome);
-
       for (let y = 0; y <= terrainTop; y++) {
         if (y >= p.worldHeight) break;
         let type: BlockType;
@@ -151,6 +175,7 @@ export function generateBottomLeft(p: TerrainParams): BlockData[] {
         blocks.push({ x, y, z, type });
       }
 
+      // 6. Fill the space above the seabed and below sea level with WATER blocks if the biome is ocean
       if (biome === "Ocean") {
         for (let y = terrainTop + 1; y <= seaSurfaceY; y++) {
           if (y >= p.worldHeight) break;
@@ -158,6 +183,7 @@ export function generateBottomLeft(p: TerrainParams): BlockData[] {
         }
       }
 
+      // 7. Generate trees if the biome is forest(y must be above sea level and below the top of the map)
       if (
         (biome === "Forest" ||
           biome === "TemperateForest" ||
@@ -165,7 +191,8 @@ export function generateBottomLeft(p: TerrainParams): BlockData[] {
         terrainTop < maxY - 4 &&
         terrainTop > seaSurfaceY
       ) {
-        const treeRoll = to01(fbm2d(noise, nx * 3.1 + 9, nz * 3.1 - 7, 2));
+        // Only generate trees if the noise value is greater than 0.72
+        const treeRoll = to01(fbm2d(noise, nx * 3.1 + 10, nz * 3.1 - 5, 2));
         if (treeRoll > 0.72) {
           const hTrunk = biome === "TropicalForest" ? 5 : 4;
           for (let t = 1; t <= hTrunk; t++) {
