@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import VoxelWorld from "./components/VoxelWorld.vue";
-import { type TerrainParams, type CameraTransform } from "./types/terrain";
+import {
+  type TerrainParams,
+  type CameraTransform,
+  defaultOrbitCameraPosition,
+} from "./types/terrain";
 
 import { generateTopLeft } from "./gen_functions/yunkunlu";
 import { generateTopRight } from "./gen_functions/kaijielai";
@@ -17,6 +21,14 @@ const isDynamicMode = ref(false);
 const toggleRenderMode = () => {
   isDynamicMode.value = !isDynamicMode.value;
 };
+
+/** 「全部」保留四宫格；否则只挂载一个画布，只看一种地形生成器 */
+type SoloViewport =
+  | "TopLeft"
+  | "TopRight"
+  | "BottomLeft"
+  | "BottomRight";
+const viewportMode = ref<"all" | SoloViewport>("all");
 
 // --- Terrain State ---
 const params = reactive<TerrainParams>({
@@ -43,14 +55,12 @@ const params = reactive<TerrainParams>({
 // --- Sync State ---
 const isSyncEnabled = ref(true);
 const sharedTransform = ref<CameraTransform>({
-  position: [params.worldSize + 30, params.worldSize - 10, params.worldSize],
-  quaternion: [-0.25, 0.5, 0.16, 0.8],
+  position: defaultOrbitCameraPosition(params),
 });
 
 const onCameraUpdate = (payload: CameraTransform) => {
   if (isSyncEnabled.value) {
     sharedTransform.value = payload;
-    console.log("Camera updated:", payload);
   }
 };
 
@@ -67,6 +77,21 @@ const regenerateSeed = () => {
           <input type="checkbox" v-model="isSyncEnabled" />
           Sync Cameras
         </label>
+      </div>
+
+      <div class="control-group sync-panel">
+        <label for="viewport-mode">Viewport</label>
+        <select
+          id="viewport-mode"
+          v-model="viewportMode"
+          class="select-input"
+        >
+          <option value="all">All</option>
+          <option value="TopLeft">Only  TopLeft（yunkunlu）</option>
+          <option value="TopRight">Only TopRight（kaijielai）</option>
+          <option value="BottomLeft">Only BottomLeft（yuxincao）</option>
+          <option value="BottomRight">Only BottomRight（yutaocao）</option>
+        </select>
       </div>
 
       <div class="control-group sync-panel">
@@ -225,40 +250,51 @@ const regenerateSeed = () => {
       </div>
     </aside>
 
-    <main class="viewport-grid">
-      <VoxelWorld
-        title="TopLeft"
-        :params="params"
-        :genFunction="generateTopLeft"
-        :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform"
-        @camera-update="onCameraUpdate"
-      />
-      <VoxelWorld
-        title="TopRight"
-        :params="params"
-        :genFunction="generateTopRight"
-        :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform"
-        @camera-update="onCameraUpdate"
-      />
-      <VoxelWorld
-        title="BottomLeft"
-        :params="params"
-        :genFunction="generateBottomLeft"
-        :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform"
-        @camera-update="onCameraUpdate"
-      />
-      <VoxelWorld
-        title="BottomRight"
-        :params="params"
-        :genFunction="generateBottomRight"
-        :sync-enabled="isSyncEnabled"
-        :shared-transform="sharedTransform"
-        :auto-regenerate-ms="isDynamicMode ? 90 : 0"
-        @camera-update="onCameraUpdate"
-      />
+    <main
+      class="viewport-grid"
+      :class="{ 'viewport-grid--solo': viewportMode !== 'all' }"
+    >
+      <template v-if="viewportMode === 'all' || viewportMode === 'TopLeft'">
+        <VoxelWorld
+          title="TopLeft"
+          :params="params"
+          :genFunction="generateTopLeft"
+          :sync-enabled="isSyncEnabled"
+          :shared-transform="sharedTransform"
+          @camera-update="onCameraUpdate"
+        />
+      </template>
+      <template v-if="viewportMode === 'all' || viewportMode === 'TopRight'">
+        <VoxelWorld
+          title="TopRight"
+          :params="params"
+          :genFunction="generateTopRight"
+          :sync-enabled="isSyncEnabled"
+          :shared-transform="sharedTransform"
+          @camera-update="onCameraUpdate"
+        />
+      </template>
+      <template v-if="viewportMode === 'all' || viewportMode === 'BottomLeft'">
+        <VoxelWorld
+          title="BottomLeft"
+          :params="params"
+          :genFunction="generateBottomLeft"
+          :sync-enabled="isSyncEnabled"
+          :shared-transform="sharedTransform"
+          @camera-update="onCameraUpdate"
+        />
+      </template>
+      <template v-if="viewportMode === 'all' || viewportMode === 'BottomRight'">
+        <VoxelWorld
+          title="BottomRight"
+          :params="params"
+          :genFunction="generateBottomRight"
+          :sync-enabled="isSyncEnabled"
+          :shared-transform="sharedTransform"
+          :auto-regenerate-ms="isDynamicMode ? 90 : 0"
+          @camera-update="onCameraUpdate"
+        />
+      </template>
     </main>
   </div>
 </template>
@@ -279,6 +315,22 @@ const regenerateSeed = () => {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.viewport-grid--solo {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.select-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #5a5a5a;
+  background: #2b2b2b;
+  color: #f4f4f4;
+  font-size: 0.9rem;
 }
 
 html,

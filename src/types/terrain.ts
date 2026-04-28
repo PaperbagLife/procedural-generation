@@ -14,7 +14,7 @@ export const BlockType = {
   MYCELIUM: 12,
   NETHERRACK: 13,
 
-  // --- yuxincao BottomLeft：LUT 生物群系专用地表（接在既有类型后）---
+  // --- yuxincao BottomLeft ---
   TUNDRA_SURFACE: 14,
   TAIGA_SURFACE: 15,
   STEPPE_SURFACE: 16,
@@ -66,10 +66,25 @@ export interface BlockMaterial {
 
 export type GenFunction = (params: TerrainParams) => BlockData[];
 
-// New type for camera synchronization
+/** 多窗口同步仅用相机位置；轨道目标点由地图中心在每块画布内单独计算 */
 export interface CameraTransform {
   position: [number, number, number];
-  quaternion: [number, number, number, number];
+}
+
+/** OrbitControls 的焦点：xz 地形平面中心 + 略高于海平面的视点高度近似 */
+export function mapOrbitTarget(p: TerrainParams): [number, number, number] {
+  const ws = p.worldSize;
+  const y = Math.max(12, Math.min(p.groundLevel * 0.42, p.worldHeight * 0.58));
+  return [ws / 2, y, ws / 2];
+}
+
+/** 初次进入时对角线方向的默认机位（相对地图中心偏移） */
+export function defaultOrbitCameraPosition(
+  p: TerrainParams,
+): [number, number, number] {
+  const [tx, ty, tz] = mapOrbitTarget(p);
+  const d = p.worldSize * 1.35;
+  return [tx + d * 0.58, ty + d * 0.5, tz + d * 0.62];
 }
 
 export const BLOCK_COLORS: Record<number, BlockMaterial> = {

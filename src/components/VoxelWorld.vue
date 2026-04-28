@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref, watch, onUnmounted } from "vue";
 import * as THREE from "three";
-import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   BlockType,
   type TerrainParams,
   type GenFunction,
   type CameraTransform,
   BLOCK_COLORS,
+  mapOrbitTarget,
 } from "../types/terrain";
 
 interface Props {
@@ -25,26 +26,16 @@ const emit = defineEmits<{
 }>();
 
 const container = ref<HTMLDivElement | null>(null);
-const isLocked = ref(false);
 
 let animationId: number | null = null;
 let regenerateTimerId: number | null = null;
+let pendingEmitFrame: number | null = null;
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
-let controls: PointerLockControls;
+let controls: OrbitControls;
+let skipCameraEmit = false;
 let instancedMeshes: THREE.InstancedMesh[] = [];
-
-const velocity = new THREE.Vector3();
-const direction = new THREE.Vector3();
-const clock = new THREE.Timer();
-
-let moveForward = false,
-  moveBackward = false,
-  moveLeft = false,
-  moveRight = false,
-  moveUp = false,
-  moveDown = false;
 
 const updateRegenerateTimer = () => {
   if (regenerateTimerId !== null) {
@@ -69,113 +60,42 @@ const disposeInstancedMesh = (mesh: THREE.InstancedMesh) => {
   }
 };
 
-const init = () => {
-  if (!container.value) return;
-
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb);
-  scene.fog = new THREE.Fog(0x87ceeb, 20, props.params.worldSize * 2);
-
-  const aspect = container.value.clientWidth / container.value.clientHeight;
-  camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-
-  // Set initial position from props
+function applySharedPositionFromSync() {
+  const t = mapOrbitTarget(props.params);
+  controls.target.set(t[0], t[1], t[2]);
+  skipCameraEmit = true;
   camera.position.fromArray(props.sharedTransform.position);
-  camera.quaternion.fromArray(props.sharedTransform.quaternion);
+  controls.update();
+  skipCameraEmit = false;
+}
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(container.value.clientWidth, container.value.clientHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  container.value.appendChild(renderer.domElement);
-
-  const ambient = new THREE.AmbientLight(0xffffff, 0.7);
-  scene.add(ambient);
-  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-  sun.position.set(50, 100, 50);
-  scene.add(sun);
-
-  controls = new PointerLockControls(camera, renderer.domElement);
-
-  controls.addEventListener("lock", () => {
-    isLocked.value = true;
-    clock.update();
-    if (animationId === null) animationId = requestAnimationFrame(animate);
-  });
-
-  controls.addEventListener("unlock", () => {
-    isLocked.value = false;
-  });
-
-  container.value.addEventListener("click", () => controls.lock());
-
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (!controls.isLocked) return;
-    switch (e.code) {
-      case "KeyW":
-        moveForward = true;
-        break;
-      case "KeyA":
-        moveLeft = true;
-        break;
-      case "KeyS":
-        moveBackward = true;
-        break;
-      case "KeyD":
-        moveRight = true;
-        break;
-      case "Space":
-        moveUp = true;
-        e.preventDefault();
-        break;
-      case "ShiftLeft":
-        moveDown = true;
-        e.preventDefault();
-        break;
-    }
+function orbitDistanceLimits(p: TerrainParams) {
+  const ws = p.worldSize;
+  return {
+    min: ws * 0.18,
+    max: ws * 10,
   };
+}
 
-  const onKeyUp = (e: KeyboardEvent) => {
-    switch (e.code) {
-      case "KeyW":
-        moveForward = false;
-        break;
-      case "KeyA":
-        moveLeft = false;
-        break;
-      case "KeyS":
-        moveBackward = false;
-        break;
-      case "KeyD":
-        moveRight = false;
-        break;
-      case "Space":
-        moveUp = false;
-        break;
-      case "ShiftLeft":
-        moveDown = false;
-        break;
-    }
-  };
+function configureOrbitDistanceAndAngles(p: TerrainParams) {
+  const lim = orbitDistanceLimits(p);
+  controls.minDistance = lim.min;
+  controls.maxDistance = lim.max;
+}
 
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("resize", onWindowResize);
-
-  generate();
-  renderFrame();
-  updateRegenerateTimer();
-
-  onUnmounted(() => {
-    window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
-    window.removeEventListener("resize", onWindowResize);
-    if (animationId) cancelAnimationFrame(animationId);
-    if (regenerateTimerId !== null) {
-      window.clearInterval(regenerateTimerId);
-      regenerateTimerId = null;
-    }
-    renderer.dispose();
+function scheduleEmitCameraIfSync() {
+  if (!props.syncEnabled || skipCameraEmit) return;
+  if (pendingEmitFrame !== null) return;
+  pendingEmitFrame = requestAnimationFrame(() => {
+    pendingEmitFrame = null;
+    emit("camera-update", {
+      position: camera.position.toArray() as [number, number, number],
+    });
   });
+}
+
+const onControlsChange = () => {
+  scheduleEmitCameraIfSync();
 };
 
 const onWindowResize = () => {
@@ -184,6 +104,84 @@ const onWindowResize = () => {
   camera.updateProjectionMatrix();
   renderer.setSize(container.value.clientWidth, container.value.clientHeight);
   renderFrame();
+};
+
+const animateLoop = () => {
+  animationId = requestAnimationFrame(animateLoop);
+  controls.update();
+  renderer.render(scene, camera);
+};
+
+const renderFrame = () => {
+  renderer.render(scene, camera);
+};
+
+const init = () => {
+  if (!container.value) return;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 20, props.params.worldSize * 2);
+
+  const aspect = container.value.clientWidth / container.value.clientHeight;
+  camera = new THREE.PerspectiveCamera(55, aspect, 0.1, Math.max(2000, props.params.worldSize * 15));
+
+  camera.position.fromArray(props.sharedTransform.position);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.value.clientWidth, container.value.clientHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  container.value.appendChild(renderer.domElement);
+
+  renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+  scene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  sun.position.set(50, 100, 50);
+  scene.add(sun);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enablePan = false;
+  controls.screenSpacePanning = true;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.09;
+  controls.rotateSpeed = 0.75;
+  controls.zoomSpeed = 0.92;
+
+  controls.minPolarAngle = THREE.MathUtils.degToRad(12);
+  controls.maxPolarAngle = Math.PI / 2 - THREE.MathUtils.degToRad(10);
+
+  configureOrbitDistanceAndAngles(props.params);
+  controls.target.set(...mapOrbitTarget(props.params));
+
+  skipCameraEmit = true;
+  controls.update();
+  skipCameraEmit = false;
+
+  controls.addEventListener("change", onControlsChange);
+
+  window.addEventListener("resize", onWindowResize);
+
+  generate();
+  renderFrame();
+  updateRegenerateTimer();
+
+  animateLoop();
+
+  onUnmounted(() => {
+    if (pendingEmitFrame !== null) cancelAnimationFrame(pendingEmitFrame);
+    window.removeEventListener("resize", onWindowResize);
+    controls.removeEventListener("change", onControlsChange);
+    if (animationId !== null) cancelAnimationFrame(animationId);
+    animationId = null;
+    if (regenerateTimerId !== null) {
+      window.clearInterval(regenerateTimerId);
+      regenerateTimerId = null;
+    }
+    controls.dispose();
+    renderer.dispose();
+  });
 };
 
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -246,19 +244,12 @@ const generate = () => {
   });
 };
 
-const renderFrame = () => {
-  renderer.render(scene, camera);
-};
-
-// Sync incoming changes from other cameras
 watch(
   () => props.sharedTransform,
-  (newVal) => {
-    if (props.syncEnabled && !isLocked.value) {
-      camera.position.fromArray(newVal.position);
-      camera.quaternion.fromArray(newVal.quaternion);
-      renderFrame();
-    }
+  () => {
+    if (!props.syncEnabled) return;
+    applySharedPositionFromSync();
+    renderFrame();
   },
   { deep: true },
 );
@@ -267,6 +258,11 @@ watch(
   () => props.params,
   () => {
     generate();
+    configureOrbitDistanceAndAngles(props.params);
+    controls.target.set(...mapOrbitTarget(props.params));
+    skipCameraEmit = true;
+    controls.update();
+    skipCameraEmit = false;
     renderFrame();
   },
   { deep: true },
@@ -279,51 +275,6 @@ watch(
   },
 );
 
-const animate = () => {
-  if (!isLocked.value) {
-    animationId = null;
-    return;
-  }
-  clock.update();
-  const delta = clock.getDelta();
-
-  const speed = 15.0;
-  const friction = 10.0;
-
-  velocity.x -= velocity.x * friction * delta;
-  velocity.z -= velocity.z * friction * delta;
-  velocity.y -= velocity.y * friction * delta;
-
-  direction.z = Number(moveForward) - Number(moveBackward);
-  direction.x = Number(moveRight) - Number(moveLeft);
-  direction.y = Number(moveUp) - Number(moveDown);
-  direction.normalize();
-
-  if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-  if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-  if (moveUp || moveDown) velocity.y += direction.y * speed * delta;
-
-  controls.moveRight(-velocity.x * 10 * delta);
-  controls.moveForward(-velocity.z * 10 * delta);
-  camera.position.y += velocity.y * 10 * delta;
-
-  // Sync outgoing changes if we are the leader
-  if (props.syncEnabled) {
-    emit("camera-update", {
-      position: camera.position.toArray() as [number, number, number],
-      quaternion: camera.quaternion.toArray() as [
-        number,
-        number,
-        number,
-        number,
-      ],
-    });
-  }
-
-  renderFrame();
-  animationId = requestAnimationFrame(animate);
-};
-
 onMounted(init);
 </script>
 
@@ -331,8 +282,8 @@ onMounted(init);
   <div class="world-container">
     <div ref="container" class="canvas-container"></div>
     <div class="label">{{ title }}</div>
-    <div v-if="isLocked" class="crosshair"></div>
-    <div v-if="isLocked && syncEnabled" class="sync-indicator">SYNC ACTIVE</div>
+
+    <div v-if="syncEnabled" class="sync-indicator">SYNC</div>
   </div>
 </template>
 
@@ -349,7 +300,11 @@ onMounted(init);
 .canvas-container {
   width: 100%;
   height: 100%;
-  cursor: crosshair;
+  cursor: grab;
+}
+
+.canvas-container:active {
+  cursor: grabbing;
 }
 
 .label {
@@ -365,6 +320,20 @@ onMounted(init);
   border: 1px solid #555;
 }
 
+.orbit-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.65);
+  color: #ccc;
+  padding: 4px 10px;
+  font-size: 10px;
+  pointer-events: none;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .sync-indicator {
   position: absolute;
   top: 10px;
@@ -375,18 +344,6 @@ onMounted(init);
   font-size: 10px;
   font-weight: bold;
   border-radius: 4px;
-  pointer-events: none;
-}
-
-.crosshair {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  border: 1px solid white;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 </style>
