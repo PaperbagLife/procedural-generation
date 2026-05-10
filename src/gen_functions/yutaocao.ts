@@ -63,7 +63,55 @@ function fbm3d(
   return norm === 0 ? 0 : total / norm;
 }
 
-// Ensure WATER and SNOW exist in your BlockType enum!
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function trilinearSample(
+  buffer: Float32Array,
+  width: number,
+  depth: number,
+  height: number,
+  x: number,
+  y: number,
+  z: number,
+): number {
+  const clampCoord = (value: number, maxValue: number) =>
+    Math.max(0, Math.min(maxValue, value));
+
+  const x0 = Math.floor(clampCoord(x, width - 1));
+  const y0 = Math.floor(clampCoord(y, height - 1));
+  const z0 = Math.floor(clampCoord(z, depth - 1));
+  const x1 = Math.min(width - 1, x0 + 1);
+  const y1 = Math.min(height - 1, y0 + 1);
+  const z1 = Math.min(depth - 1, z0 + 1);
+
+  const tx = x - x0;
+  const ty = y - y0;
+  const tz = z - z0;
+
+  const index = (ix: number, iz: number, iy: number) =>
+    (ix * depth + iz) * height + iy;
+
+  const c000 = buffer[index(x0, z0, y0)];
+  const c100 = buffer[index(x1, z0, y0)];
+  const c010 = buffer[index(x0, z1, y0)];
+  const c110 = buffer[index(x1, z1, y0)];
+  const c001 = buffer[index(x0, z0, y1)];
+  const c101 = buffer[index(x1, z0, y1)];
+  const c011 = buffer[index(x0, z1, y1)];
+  const c111 = buffer[index(x1, z1, y1)];
+
+  const c00 = lerp(c000, c100, tx);
+  const c10 = lerp(c010, c110, tx);
+  const c01 = lerp(c001, c101, tx);
+  const c11 = lerp(c011, c111, tx);
+  const c0 = lerp(c00, c10, tz);
+  const c1 = lerp(c01, c11, tz);
+
+  return lerp(c0, c1, ty);
+}
+
 const RETREAT_LAYER_CHOICES: Record<"grass" | "dirt" | "rock", BlockType[]> = {
   grass: [
     BlockType.GRASS,
@@ -73,6 +121,7 @@ const RETREAT_LAYER_CHOICES: Record<"grass" | "dirt" | "rock", BlockType[]> = {
     BlockType.SCULK,
     BlockType.WATER,
     BlockType.MAGMA,
+    BlockType.CREEPER,
   ],
   dirt: [
     BlockType.DIRT,
@@ -83,6 +132,7 @@ const RETREAT_LAYER_CHOICES: Record<"grass" | "dirt" | "rock", BlockType[]> = {
     BlockType.SCULK,
     BlockType.NETHERRACK,
     BlockType.MAGMA,
+    BlockType.CREEPER,
   ],
   rock: [
     BlockType.ROCK,
@@ -92,6 +142,7 @@ const RETREAT_LAYER_CHOICES: Record<"grass" | "dirt" | "rock", BlockType[]> = {
     BlockType.SCULK,
     BlockType.NETHERRACK,
     BlockType.MAGMA,
+    BlockType.CREEPER,
   ],
 };
 
@@ -129,13 +180,10 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
   const t = (typeof performance !== "undefined" ? performance.now() : Date.now()) * 0.001;
   const cycleSpeed = 0.5;
 
-  // 1. Shift time so the cycle increments exactly when the wave is at its smallest (invisible)
   const shiftedTime = t * cycleSpeed + Math.PI / 2;
   const currentCycle = Math.floor(shiftedTime / (Math.PI * 2));
   const previousCycle = currentCycle - 1;
 
-  // 2. Helper to get the map for a specific cycle. 
-  // If cycle is < 0, it returns the standard uninfected terrain.
   const getMapForCycle = (cycle: number) => {
     if (cycle < 0) return { grass: BlockType.GRASS, dirt: BlockType.DIRT, rock: BlockType.ROCK };
     return {
@@ -147,27 +195,49 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
 
   const oldMutationMap = getMapForCycle(previousCycle);
   const newMutationMap = getMapForCycle(currentCycle);
-
-  // 3. Determine if the wave is currently expanding or shrinking
-  // Math.cos determines the derivative (direction) of our Math.sin wave
   const isExpanding = Math.cos(t * cycleSpeed) > 0;
 
   const centerX = Math.floor(p.worldSize / 2);
   const centerZ = Math.floor(p.worldSize / 2);
-  
   const centerHeightOffset = fbm2d(terrainNoise, centerX * p.freq, centerZ * p.freq, Math.max(1, p.octaves));
   const centerY = clamp(Math.round(p.groundLevel + centerHeightOffset * p.amp), 1, p.worldHeight - 1);
 
   const wave = Math.sin(t * cycleSpeed); 
-
-  const maxDist = Math.sqrt(
-    Math.pow(p.worldSize, 2) + Math.pow(p.worldHeight, 2)
-  );
-
+  const maxDist = Math.sqrt(Math.pow(p.worldSize, 2) + Math.pow(p.worldHeight, 2));
   const minRadius = -maxDist * 0.3;
   const maxRadius = maxDist * 1.2;
   const currentRadius = minRadius + (wave + 1) * 0.5 * (maxRadius - minRadius);
 
+  // Precompute Organic Offset
+  const noiseScale = p.freq * 2;
+  const magnitude = p.worldSize * 0.25;
+  const organicStep = Math.max(2, Math.floor(Math.min(p.worldSize, p.worldHeight) / 24));
+  const organicWidth = Math.ceil(p.worldSize / organicStep) + 1;
+  const organicDepth = Math.ceil(p.worldSize / organicStep) + 1;
+  const organicHeight = Math.ceil(p.worldHeight / organicStep) + 1;
+  const organicBuffer = new Float32Array(organicWidth * organicDepth * organicHeight);
+
+  for (let ox = 0; ox < organicWidth; ox++) {
+    for (let oz = 0; oz < organicDepth; oz++) {
+      for (let oy = 0; oy < organicHeight; oy++) {
+        const sampleX = Math.min(p.worldSize - 1, ox * organicStep);
+        const sampleZ = Math.min(p.worldSize - 1, oz * organicStep);
+        const sampleY = Math.min(p.worldHeight - 1, oy * organicStep);
+        const val = fbm3d(
+          infectionNoise, 
+          sampleX * noiseScale, 
+          sampleY * noiseScale, 
+          sampleZ * noiseScale, 
+          3
+        ) * magnitude;
+        // Index strategy: [x][z][y] to match the inner loop access pattern
+        const index = (ox * organicDepth + oz) * organicHeight + oy;
+        organicBuffer[index] = val;
+      }
+    }
+  }
+
+  // Main Generation Loop 
   for (let x = 0; x < p.worldSize; x++) {
     for (let z = 0; z < p.worldSize; z++) {
       
@@ -181,15 +251,18 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
         const dz = z - centerZ;
         const pureDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-        const noiseScale = p.freq * 2.5;
-        const organicOffset = fbm3d(
-          infectionNoise, 
-          x * noiseScale, 
-          y * noiseScale, 
-          z * noiseScale, 
-          3
-        ) * (p.worldSize * 0.25); 
+        // Access precomputed organic offset
+        const organicOffset = trilinearSample(
+          organicBuffer,
+          organicWidth,
+          organicDepth,
+          organicHeight,
+          x / organicStep,
+          y / organicStep,
+          z / organicStep,
+        );
 
+        // boilingEdge remains live as it is time-dependent
         const boilingEdge = fbm3d(
           infectionNoise, 
           x * noiseScale * 2, 
@@ -201,19 +274,16 @@ export function generateBottomRight(p: TerrainParams): BlockData[] {
         const effectiveDist = pureDistance + organicOffset + boilingEdge;
         const isInfected = effectiveDist < currentRadius;
 
-        // 4. Base layer lookup
         const depthFromSurface = surfaceY - y;
         let baseKind: "grass" | "dirt" | "rock" = "rock";
         if (depthFromSurface === 0) baseKind = "grass";
         else if (depthFromSurface <= 3) baseKind = "dirt";
 
-        // 5. Apply Block Types
         let type: BlockType;
-
+        
         if (isInfected) {
           type = BlockType.NETHERRACK;
         } else {
-          // Sleight of hand: If expanding, show the old terrain. If shrinking, reveal the new terrain.
           const activeMap = isExpanding ? oldMutationMap : newMutationMap;
           type = activeMap[baseKind];
         }
